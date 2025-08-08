@@ -211,31 +211,11 @@ function handlePhotoUpload(event, sectionIndex) {
                             return;
                         }
                         
-                        // Créer un blob à partir du dataUrl pour l'aperçu
-                        let blobUrl;
-                        try {
-                            // Extraire les données binaires du dataUrl
-                            const byteString = atob(dataUrl.split(',')[1]);
-                            const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
-                            const ab = new ArrayBuffer(byteString.length);
-                            const ia = new Uint8Array(ab);
-                            
-                            for (let i = 0; i < byteString.length; i++) {
-                                ia[i] = byteString.charCodeAt(i);
-                            }
-                            
-                            // Créer un blob à partir des données binaires
-                            const blob = new Blob([ab], {type: mimeString});
-                            blobUrl = URL.createObjectURL(blob);
-                            console.log(`✅ Blob URL créée avec succès pour ${file.name}`);
-                        } catch (error) {
-                            console.error(`❌ Erreur lors de la création du blob: ${error.message}`);
-                            blobUrl = dataUrl; // Fallback to dataUrl if blob creation fails
-                        }
-                        
+                        // Utiliser directement le dataUrl comme URL pour l'aperçu
+                        // Cela garantit que l'URL persistera après le rechargement ou le déploiement
                         const photoData = {
                             id: Date.now() + Math.random(),
-                            url: blobUrl, // URL créée à partir du dataUrl pour l'aperçu
+                            url: dataUrl, // Utiliser directement le dataUrl comme URL
                             dataUrl: dataUrl, // Pour le PDF et comme sauvegarde
                             name: file.name,
                             size: compressedBlob.size
@@ -472,32 +452,13 @@ function updatePhotoPreview(sectionIndex) {
         
         // Vérifier si l'URL de la photo existe
         if (!photo.url) {
-            console.log(`🔄 URL manquante pour la photo ${idx} (${photo.name}), tentative de recréation à partir du dataUrl`);
+            console.log(`🔄 URL manquante pour la photo ${idx} (${photo.name}), utilisation du dataUrl`);
             
-            // Si dataUrl existe mais pas url, recréer l'URL
+            // Si dataUrl existe mais pas url, utiliser directement le dataUrl
             if (photo.dataUrl) {
-                try {
-                    // Convertir dataUrl en Blob
-                    const byteString = atob(photo.dataUrl.split(',')[1]);
-                    const mimeString = photo.dataUrl.split(',')[0].split(':')[1].split(';')[0];
-                    const ab = new ArrayBuffer(byteString.length);
-                    const ia = new Uint8Array(ab);
-                    
-                    for (let i = 0; i < byteString.length; i++) {
-                        ia[i] = byteString.charCodeAt(i);
-                    }
-                    
-                    const blob = new Blob([ab], {type: mimeString});
-                    photo.url = URL.createObjectURL(blob);
-                    console.log(`✅ URL recréée avec succès pour ${photo.name}`);
-                    photosFixed++;
-                } catch (error) {
-                    console.error(`❌ Erreur lors de la recréation de l'URL: ${error.message}`);
-                    // Utiliser directement le dataUrl comme source de l'image
-                    photo.url = photo.dataUrl;
-                    console.log(`🔄 Utilisation du dataUrl comme URL pour ${photo.name}`);
-                    photosFixed++;
-                }
+                photo.url = photo.dataUrl;
+                console.log(`✅ URL définie à partir du dataUrl pour ${photo.name}`);
+                photosFixed++;
             }
         }
         
@@ -591,17 +552,7 @@ function removePhoto(sectionIndex, photoId) {
     
     sectionPhotos[sectionIndex] = sectionPhotos[sectionIndex].filter(photo => {
         if (photo.id === photoId) {
-            console.log(`🔄 Révocation de l'URL pour ${photo.name}`);
-            if (photo.url) {
-                try {
-                    URL.revokeObjectURL(photo.url);
-                    console.log(`✅ URL révoquée avec succès pour ${photo.name}`);
-                } catch (error) {
-                    console.error(`❌ Erreur lors de la révocation de l'URL: ${error.message}`);
-                }
-            } else {
-                console.warn(`⚠️ Pas d'URL à révoquer pour ${photo.name}`);
-            }
+            console.log(`🔄 Suppression de la photo ${photo.name}`);
             return false;
         }
         return true;
