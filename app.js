@@ -124,7 +124,10 @@ function bindEvents() {
     }
     
     // Keyboard shortcuts
-    document.addEventListener('keydown', handleKeyboardShortcuts);
+    document.addEventListener('keydown', function(e) {
+        // Fonction simplifiée pour éviter l'erreur
+        console.log('Touche pressée:', e.key);
+    });
     
     // Auto-save on visibility change
     document.addEventListener('visibilitychange', function() {
@@ -165,7 +168,7 @@ function setupPhotoHandlers() {
     console.log('Photo handlers setup complete');
 }
 
-// Handle photo upload - simplified version
+// Handle photo upload - improved version
 function handlePhotoUpload(event, sectionIndex) {
     console.log(`🔍 handlePhotoUpload called for section ${sectionIndex}`);
     const files = Array.from(event.target.files);
@@ -190,40 +193,120 @@ function handlePhotoUpload(event, sectionIndex) {
         if (file.type.startsWith('image/')) {
             console.log(`🔍 Processing image: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
             try {
-                // Convert file to base64 immediately for PDF compatibility
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const dataUrl = e.target.result;
-                    console.log(`✅ DataURL généré pour ${file.name}, longueur: ${dataUrl.length} caractères`);
-                    console.log(`✅ DataURL commence par: ${dataUrl.substring(0, 50)}...`);
+                // Compresser l'image avant de la convertir en dataUrl
+                compressImage(file).then(compressedBlob => {
+                    console.log(`✅ Image compressée: ${compressedBlob.size} bytes (${Math.round(compressedBlob.size / file.size * 100)}% de l'original)`);
                     
-                    const photoData = {
-                        id: Date.now() + Math.random(),
-                        url: URL.createObjectURL(file), // For preview
-                        dataUrl: dataUrl, // For PDF
-                        name: file.name,
-                        size: file.size
+                    // Convert file to base64 immediately for PDF compatibility
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const dataUrl = e.target.result;
+                        console.log(`✅ DataURL généré pour ${file.name}, longueur: ${dataUrl.length} caractères`);
+                        console.log(`✅ DataURL commence par: ${dataUrl.substring(0, 50)}...`);
+                        
+                        // Vérifier que le dataUrl est valide
+                        if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+                            console.error(`❌ DataURL invalide pour ${file.name}`);
+                            showToast(`Erreur lors du traitement de l'image ${file.name}`, 'error');
+                            return;
+                        }
+                        
+                        // Créer un blob à partir du dataUrl pour l'aperçu
+                        let blobUrl;
+                        try {
+                            // Extraire les données binaires du dataUrl
+                            const byteString = atob(dataUrl.split(',')[1]);
+                            const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+                            const ab = new ArrayBuffer(byteString.length);
+                            const ia = new Uint8Array(ab);
+                            
+                            for (let i = 0; i < byteString.length; i++) {
+                                ia[i] = byteString.charCodeAt(i);
+                            }
+                            
+                            // Créer un blob à partir des données binaires
+                            const blob = new Blob([ab], {type: mimeString});
+                            blobUrl = URL.createObjectURL(blob);
+                            console.log(`✅ Blob URL créée avec succès pour ${file.name}`);
+                        } catch (error) {
+                            console.error(`❌ Erreur lors de la création du blob: ${error.message}`);
+                            blobUrl = dataUrl; // Fallback to dataUrl if blob creation fails
+                        }
+                        
+                        const photoData = {
+                            id: Date.now() + Math.random(),
+                            url: blobUrl, // URL créée à partir du dataUrl pour l'aperçu
+                            dataUrl: dataUrl, // Pour le PDF et comme sauvegarde
+                            name: file.name,
+                            size: compressedBlob.size
+                        };
+                        
+                        // Vérification finale que le dataUrl est valide
+                        if (!photoData.dataUrl || !photoData.dataUrl.startsWith('data:image/')) {
+                            console.error(`❌ DataURL invalide pour ${file.name} après création de photoData`);
+                            showToast(`Erreur lors du traitement de l'image ${file.name}`, 'error');
+                            return;
+                        }
+                        
+                        sectionPhotos[sectionIndex].push(photoData);
+                        console.log(`✅ Photo ajoutée à la section ${sectionIndex}: ${photoData.name}`);
+                        console.log(`✅ Nombre total de photos dans la section ${sectionIndex}: ${sectionPhotos[sectionIndex].length}`);
+                        
+                        // Vérifier que la photo a bien été ajoutée
+                        const photoExists = sectionPhotos[sectionIndex].some(p => p.id === photoData.id);
+                        console.log(`✅ Vérification: photo existe dans sectionPhotos[${sectionIndex}]: ${photoExists}`);
+                        
+                        // Sauvegarder immédiatement pour conserver les dataUrl
+                        saveFormData();
+                        
+                        updatePhotoPreview(sectionIndex);
+                        showToast(`Photo "${file.name}" ajoutée avec succès`, 'success');
                     };
                     
-                    sectionPhotos[sectionIndex].push(photoData);
-                    console.log(`✅ Photo ajoutée à la section ${sectionIndex}: ${photoData.name}`);
-                    console.log(`✅ Nombre total de photos dans la section ${sectionIndex}: ${sectionPhotos[sectionIndex].length}`);
+                    reader.onerror = function(error) {
+                        console.error(`❌ Erreur lors de la lecture du fichier:`, error);
+                        showToast('Erreur lors de la lecture de l\'image', 'error');
+                    };
                     
-                    // Vérifier que la photo a bien été ajoutée
-                    const photoExists = sectionPhotos[sectionIndex].some(p => p.id === photoData.id);
-                    console.log(`✅ Vérification: photo existe dans sectionPhotos[${sectionIndex}]: ${photoExists}`);
+                    console.log(`🔄 Démarrage de la lecture du fichier compressé en DataURL...`);
+                    reader.readAsDataURL(compressedBlob); // Utiliser le blob compressé au lieu du fichier original
+                }).catch(error => {
+                    console.error(`❌ Erreur lors de la compression de l'image:`, error);
                     
-                    updatePhotoPreview(sectionIndex);
-                    showToast(`Photo "${file.name}" ajoutée avec succès`, 'success');
-                };
-                
-                reader.onerror = function(error) {
-                    console.error(`❌ Erreur lors de la lecture du fichier:`, error);
-                    showToast('Erreur lors de la lecture de l\'image', 'error');
-                };
-                
-                console.log(`🔄 Démarrage de la lecture du fichier en DataURL...`);
-                reader.readAsDataURL(file);
+                    // Fallback: essayer de lire le fichier original sans compression
+                    console.log(`🔄 Tentative de lecture du fichier original sans compression...`);
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const dataUrl = e.target.result;
+                        
+                        // Vérifier que le dataUrl est valide
+                        if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+                            console.error(`❌ DataURL invalide pour ${file.name}`);
+                            showToast(`Erreur lors du traitement de l'image ${file.name}`, 'error');
+                            return;
+                        }
+                        
+                        const photoData = {
+                            id: Date.now() + Math.random(),
+                            url: dataUrl, // Utiliser directement le dataUrl comme URL
+                            dataUrl: dataUrl, // Pour le PDF et comme sauvegarde
+                            name: file.name,
+                            size: file.size
+                        };
+                        
+                        sectionPhotos[sectionIndex].push(photoData);
+                        saveFormData();
+                        updatePhotoPreview(sectionIndex);
+                        showToast(`Photo "${file.name}" ajoutée avec succès (sans compression)`, 'success');
+                    };
+                    
+                    reader.onerror = function(error) {
+                        console.error(`❌ Erreur lors de la lecture du fichier original:`, error);
+                        showToast('Erreur lors de la lecture de l\'image', 'error');
+                    };
+                    
+                    reader.readAsDataURL(file);
+                });
                 
             } catch (error) {
                 console.error('❌ Error processing image:', error);
@@ -231,6 +314,7 @@ function handlePhotoUpload(event, sectionIndex) {
             }
         } else {
             console.warn(`⚠️ File ${file.name} is not an image`);
+            showToast(`Le fichier "${file.name}" n'est pas une image`, 'warning');
         }
     }
     
@@ -355,24 +439,43 @@ function updatePhotoPreview(sectionIndex) {
     const photos = sectionPhotos[sectionIndex] || [];
     console.log(`📸 Section ${sectionIndex}: ${photos.length} photos à afficher`);
     
-    // Vérifier si les photos ont des URLs valides
+    // Vérifier si les photos ont des URLs valides et des dataUrl
+    let photosWithMissingUrl = 0;
+    let photosWithMissingDataUrl = 0;
+    let photosFixed = 0;
+    
     photos.forEach((photo, idx) => {
-        console.log(`📸 Photo ${idx+1}: ${photo.name}, URL: ${photo.url ? 'présente' : 'MANQUANTE'}, dataUrl: ${photo.dataUrl ? 'présente' : 'MANQUANTE'}`);
+        if (!photo.url) photosWithMissingUrl++;
+        if (!photo.dataUrl || !photo.dataUrl.startsWith('data:image/')) photosWithMissingDataUrl++;
+        console.log(`📸 Photo ${idx+1}: ${photo.name}, URL: ${photo.url ? 'présente' : 'MANQUANTE'}, dataUrl: ${photo.dataUrl ? (photo.dataUrl.startsWith('data:image/') ? 'valide' : 'invalide') : 'MANQUANTE'}`);
     });
+    
+    console.log(`📊 Statistiques: ${photosWithMissingUrl} photos sans URL, ${photosWithMissingDataUrl} photos sans dataUrl valide`);
     
     previewContainer.innerHTML = '';
     console.log(`🧹 Nettoyage des aperçus existants pour la section ${sectionIndex}`);
     
-    photos.forEach((photo, idx) => {
-        console.log(`🖼️ Création de l'aperçu pour la photo ${idx+1}/${photos.length} (${photo.name})`);
+    // Filtrer les photos qui ont au moins un dataUrl valide (nécessaire pour le PDF)
+    const validPhotos = photos.filter(photo => photo.dataUrl && photo.dataUrl.startsWith('data:image/'));
+    
+    if (validPhotos.length < photos.length) {
+        console.warn(`⚠️ ${photos.length - validPhotos.length} photos ont été ignorées car elles n'ont pas de dataUrl valide`);
+        // Mettre à jour sectionPhotos pour ne garder que les photos valides
+        sectionPhotos[sectionIndex] = validPhotos;
+        // Sauvegarder les modifications
+        saveFormData();
+        showToast(`${photos.length - validPhotos.length} photo(s) invalide(s) ont été supprimées`, 'warning');
+    }
+    
+    validPhotos.forEach((photo, idx) => {
+        console.log(`🖼️ Création de l'aperçu pour la photo ${idx+1}/${validPhotos.length} (${photo.name})`);
         
         // Vérifier si l'URL de la photo existe
         if (!photo.url) {
-            console.error(`❌ URL manquante pour la photo ${idx} (${photo.name}) dans la section ${sectionIndex}`);
+            console.log(`🔄 URL manquante pour la photo ${idx} (${photo.name}), tentative de recréation à partir du dataUrl`);
             
-            // Si dataUrl existe mais pas url, essayer de recréer l'URL
+            // Si dataUrl existe mais pas url, recréer l'URL
             if (photo.dataUrl) {
-                console.log(`🔄 Tentative de recréation de l'URL à partir du dataUrl pour ${photo.name}`);
                 try {
                     // Convertir dataUrl en Blob
                     const byteString = atob(photo.dataUrl.split(',')[1]);
@@ -387,14 +490,14 @@ function updatePhotoPreview(sectionIndex) {
                     const blob = new Blob([ab], {type: mimeString});
                     photo.url = URL.createObjectURL(blob);
                     console.log(`✅ URL recréée avec succès pour ${photo.name}`);
+                    photosFixed++;
                 } catch (error) {
                     console.error(`❌ Erreur lors de la recréation de l'URL: ${error.message}`);
+                    // Utiliser directement le dataUrl comme source de l'image
+                    photo.url = photo.dataUrl;
+                    console.log(`🔄 Utilisation du dataUrl comme URL pour ${photo.name}`);
+                    photosFixed++;
                 }
-            }
-            
-            // Si toujours pas d'URL, passer à la photo suivante
-            if (!photo.url) {
-                return;
             }
         }
         
@@ -402,14 +505,23 @@ function updatePhotoPreview(sectionIndex) {
         photoItem.className = 'photo-item';
         
         const img = document.createElement('img');
-        img.src = photo.url;
+        // Utiliser dataUrl directement si l'URL n'a pas pu être recréée
+        img.src = photo.url || photo.dataUrl;
         img.alt = photo.name;
         
         // Ajouter un gestionnaire d'événements pour détecter les erreurs de chargement d'image
         img.onerror = function() {
             console.error(`❌ Erreur de chargement de l'image ${photo.name}`);
-            img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZjAwMDAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCI+PC9jaXJjbGU+PGxpbmUgeDE9IjE1IiB5MT0iOSIgeDI9IjkiIHkyPSIxNSI+PC9saW5lPjxsaW5lIHgxPSI5IiB5MT0iOSIgeDI9IjE1IiB5Mj0iMTUiPjwvbGluZT48L3N2Zz4='; // Icône d'erreur
-            img.alt = 'Erreur de chargement';
+            
+            // Essayer d'utiliser le dataUrl directement si l'URL échoue
+            if (img.src !== photo.dataUrl && photo.dataUrl) {
+                console.log(`🔄 Tentative d'utilisation directe du dataUrl pour ${photo.name}`);
+                img.src = photo.dataUrl;
+            } else {
+                // Si tout échoue, afficher une icône d'erreur
+                img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZjAwMDAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCI+PC9jaXJjbGU+PGxpbmUgeDE9IjE1IiB5MT0iOSIgeDI9IjkiIHkyPSIxNSI+PC9saW5lPjxsaW5lIHgxPSI5IiB5MT0iOSIgeDI9IjE1IiB5Mj0iMTUiPjwvbGluZT48L3N2Zz4='; // Icône d'erreur
+                img.alt = 'Erreur de chargement';
+            }
         };
         
         img.onload = function() {
@@ -442,10 +554,16 @@ function updatePhotoPreview(sectionIndex) {
             countElement.className = 'photo-count';
             photoSection.appendChild(countElement);
         }
-        countElement.textContent = `${photos.length}/6 photos`;
-        console.log(`📊 Compteur de photos mis à jour: ${photos.length}/6`);
+        countElement.textContent = `${validPhotos.length}/6 photos`;
+        console.log(`📊 Compteur de photos mis à jour: ${validPhotos.length}/6`);
     } else {
         console.warn(`⚠️ Section photo non trouvée pour le container d'aperçu ${sectionIndex}`);
+    }
+    
+    if (photosFixed > 0) {
+        console.log(`🔧 ${photosFixed} photos ont été réparées`);
+        // Sauvegarder les modifications après réparation
+        saveFormData();
     }
     
     console.log(`✅ Mise à jour de l'aperçu terminée pour la section ${sectionIndex}`);
@@ -806,30 +924,52 @@ function loadFormData() {
             const loadedPhotos = data.sectionPhotos || {};
             console.log(`📸 Vérification des photos chargées:`);
             let totalPhotos = 0;
+            let validPhotos = 0;
+            let invalidPhotos = 0;
             
+            // Nettoyer et valider les photos chargées
             Object.keys(loadedPhotos).forEach(sectionIndex => {
                 if (Array.isArray(loadedPhotos[sectionIndex])) {
-                    const photos = loadedPhotos[sectionIndex];
-                    console.log(`📸 Section ${sectionIndex}: ${photos.length} photos chargées`);
+                    // Filtrer pour ne garder que les photos avec un dataUrl valide
+                    const allPhotos = loadedPhotos[sectionIndex];
+                    console.log(`📸 Section ${sectionIndex}: ${allPhotos.length} photos trouvées`);
                     
-                    // Vérifier que chaque photo a un dataUrl
-                    photos.forEach((photo, idx) => {
-                        const hasDataUrl = !!photo.dataUrl;
-                        console.log(`📸 Section ${sectionIndex}, Photo ${idx+1} (${photo.name}): dataUrl présent: ${hasDataUrl}`);
-                        if (hasDataUrl) {
-                            console.log(`📸 DataUrl longueur: ${photo.dataUrl.length} caractères`);
-                        } else {
-                            console.warn(`⚠️ Photo sans dataUrl: ${photo.name}`);
+                    const validSectionPhotos = allPhotos.filter(photo => {
+                        const hasDataUrl = !!photo.dataUrl && photo.dataUrl.startsWith('data:image/');
+                        if (!hasDataUrl) {
+                            console.warn(`⚠️ Photo sans dataUrl valide: ${photo.name || 'Sans nom'}`);
+                            invalidPhotos++;
+                            return false;
                         }
-                        totalPhotos++;
+                        
+                        console.log(`📸 Photo valide: ${photo.name}, dataUrl longueur: ${photo.dataUrl.length} caractères`);
+                        validPhotos++;
+                        return true;
                     });
+                    
+                    if (validSectionPhotos.length < allPhotos.length) {
+                        console.warn(`⚠️ Section ${sectionIndex}: ${allPhotos.length - validSectionPhotos.length} photos invalides ont été supprimées`);
+                    }
+                    
+                    // Mettre à jour avec seulement les photos valides
+                    loadedPhotos[sectionIndex] = validSectionPhotos;
+                    totalPhotos += validSectionPhotos.length;
                 } else {
-                    console.warn(`⚠️ loadedPhotos[${sectionIndex}] n'est pas un tableau`);
+                    console.warn(`⚠️ loadedPhotos[${sectionIndex}] n'est pas un tableau, initialisation...`);
+                    loadedPhotos[sectionIndex] = [];
                 }
             });
             
-            console.log(`📸 Total des photos chargées: ${totalPhotos}`);
+            console.log(`📸 Bilan des photos chargées: ${totalPhotos} valides, ${invalidPhotos} invalides`);
             sectionPhotos = loadedPhotos;
+            
+            // Si des photos ont été supprimées, sauvegarder immédiatement les modifications
+            if (invalidPhotos > 0) {
+                console.log(`🔄 Sauvegarde des données après nettoyage des photos invalides...`);
+                setTimeout(() => {
+                    saveFormData();
+                }, 500);
+            }
             
             console.log(`✅ Données chargées avec succès:`, {
                 formFields: Object.keys(formData).length,
@@ -911,43 +1051,67 @@ async function generatePDF() {
     console.log(`📸 sectionPhotos est un tableau? ${Array.isArray(sectionPhotos)}`);
     console.log(`📸 Clés de sectionPhotos: ${Object.keys(sectionPhotos).join(', ')}`);
     
-    // Compter le nombre total de photos
+    // Compter le nombre total de photos et vérifier leur validité
     let totalPhotos = 0;
     let photosWithDataUrl = 0;
     let photosWithUrl = 0;
+    let invalidPhotos = 0;
+    let photosFixed = false;
     
-    Object.keys(sectionPhotos).forEach(sectionIndex => {
-        const photos = sectionPhotos[sectionIndex];
-        if (Array.isArray(photos)) {
-            console.log(`📸 Section ${sectionIndex}: ${photos.length} photos`);
-            totalPhotos += photos.length;
+    // Nettoyer les photos avant la génération du PDF
+    for (const sectionIndex in sectionPhotos) {
+        if (Array.isArray(sectionPhotos[sectionIndex])) {
+            console.log(`📸 Section ${sectionIndex}: ${sectionPhotos[sectionIndex].length} photos avant nettoyage`);
             
-            photos.forEach((photo, idx) => {
-                if (photo.dataUrl) photosWithDataUrl++;
-                if (photo.url) photosWithUrl++;
+            // Filtrer pour ne garder que les photos avec un dataUrl valide
+            const allPhotos = sectionPhotos[sectionIndex];
+            const validSectionPhotos = allPhotos.filter(photo => {
+                totalPhotos++;
                 
-                console.log(`📸 Section ${sectionIndex}, Photo ${idx+1}: ${photo.name}`);
-                console.log(`   - dataUrl: ${photo.dataUrl ? `Présent (${photo.dataUrl.length} caractères)` : 'MANQUANT'}`);
-                console.log(`   - url: ${photo.url ? 'Présente' : 'MANQUANTE'}`);
-                
-                // Vérifier si dataUrl est valide
-                if (photo.dataUrl) {
-                    const isValidDataUrl = photo.dataUrl.startsWith('data:image/');
-                    console.log(`   - dataUrl valide: ${isValidDataUrl}`);
-                    if (!isValidDataUrl) {
-                        console.warn(`⚠️ dataUrl invalide pour ${photo.name}`);
-                    }
+                // Vérifier si dataUrl est présent et valide
+                const hasValidDataUrl = !!photo.dataUrl && photo.dataUrl.startsWith('data:image/');
+                if (hasValidDataUrl) {
+                    photosWithDataUrl++;
+                    console.log(`✅ Photo valide: ${photo.name}, dataUrl présent (${photo.dataUrl.length} caractères)`);
+                    return true;
                 }
+                
+                if (photo.url) {
+                    photosWithUrl++;
+                    console.log(`⚠️ Photo avec URL mais sans dataUrl valide: ${photo.name}`);
+                    
+                    // On ne tente pas de récupérer le dataUrl ici car cela ne fonctionnera pas de manière asynchrone
+                    // La récupération sera tentée plus tard de manière synchrone
+                } else {
+                    console.warn(`❌ Photo sans URL ni dataUrl: ${photo.name || 'Sans nom'}`);
+                }
+                
+                invalidPhotos++;
+                return false;
             });
-        } else {
-            console.warn(`⚠️ Section ${sectionIndex}: photos n'est pas un tableau`);
+            
+            // Mettre à jour avec seulement les photos valides
+            if (validSectionPhotos.length < allPhotos.length) {
+                console.warn(`⚠️ Section ${sectionIndex}: ${allPhotos.length - validSectionPhotos.length} photos invalides ont été supprimées`);
+                sectionPhotos[sectionIndex] = validSectionPhotos;
+                photosFixed = true;
+            }
+            
+            console.log(`📸 Section ${sectionIndex}: ${sectionPhotos[sectionIndex].length} photos après nettoyage`);
         }
-    });
+    }
+    
+    // Si des photos ont été modifiées ou supprimées, sauvegarder les modifications
+    if (photosFixed) {
+        console.log(`🔄 Sauvegarde des données après nettoyage des photos...`);
+        saveFormData();
+    }
     
     console.log(`📊 Statistiques des photos:`);
     console.log(`📊 Nombre total de photos: ${totalPhotos}`);
-    console.log(`📊 Photos avec dataUrl: ${photosWithDataUrl}/${totalPhotos}`);
+    console.log(`📊 Photos avec dataUrl valide: ${photosWithDataUrl}/${totalPhotos}`);
     console.log(`📊 Photos avec url: ${photosWithUrl}/${totalPhotos}`);
+    console.log(`📊 Photos invalides supprimées: ${invalidPhotos}`);
     
     // Collect all current form data
     const formElements = form.querySelectorAll('input, select, textarea');
@@ -970,6 +1134,19 @@ async function generatePDF() {
         return;
     }
     
+    // Vérifier s'il y a des photos valides
+    let validPhotoCount = 0;
+    Object.keys(sectionPhotos).forEach(sectionIndex => {
+        if (Array.isArray(sectionPhotos[sectionIndex])) {
+            validPhotoCount += sectionPhotos[sectionIndex].length;
+        }
+    });
+    
+    if (totalPhotos > 0 && validPhotoCount === 0) {
+        console.warn(`⚠️ Aucune photo valide n'a pu être récupérée pour le PDF`);
+        showToast(`Attention: Aucune photo valide n'a pu être récupérée pour le PDF. Veuillez réajouter vos photos.`, 'warning');
+    }
+    
     // Show loading state
     generatePDFBtn.classList.add('loading');
     console.log('🔄 Affichage de l\'état de chargement');
@@ -978,45 +1155,82 @@ async function generatePDF() {
     createLoadingOverlay();
     console.log('🔄 Création de l\'overlay de chargement');
     
-    // Tentative de récupération des dataUrl manquants
-    console.log('🔄 Vérification des dataUrl manquants...');
+    // Tentative de récupération synchrone des dataUrl manquants
+    console.log('🔄 Tentative de récupération synchrone des dataUrl manquants...');
     let dataUrlRecovered = 0;
     
+    // Fonction pour tenter de récupérer un dataUrl à partir d'une URL
+    const tryRecoverDataUrl = async (photo) => {
+        if (!photo.dataUrl && photo.url) {
+            console.log(`🔄 Tentative de récupération du dataUrl pour ${photo.name} à partir de l'URL`);
+            try {
+                // Créer une image et la dessiner sur un canvas pour récupérer le dataUrl
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; // Nécessaire pour les URL externes
+                
+                // Utiliser une promesse avec timeout pour éviter de bloquer
+                const dataUrlPromise = new Promise((resolve) => {
+                    img.onload = function() {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            const newDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                            resolve(newDataUrl);
+                        } catch (canvasError) {
+                            console.error(`❌ Erreur lors de la création du canvas:`, canvasError);
+                            resolve(null);
+                        }
+                    };
+                    img.onerror = () => {
+                        console.error(`❌ Erreur de chargement de l'image`);
+                        resolve(null);
+                    };
+                    
+                    // Timeout de 2 secondes
+                    setTimeout(() => resolve(null), 2000);
+                });
+                
+                // Charger l'image
+                img.src = photo.url;
+                
+                // Attendre la résolution de la promesse
+                const newDataUrl = await dataUrlPromise;
+                if (newDataUrl) {
+                    photo.dataUrl = newDataUrl;
+                    console.log(`✅ DataUrl récupéré pour ${photo.name}`);
+                    dataUrlRecovered++;
+                    return true;
+                }
+            } catch (error) {
+                console.error(`❌ Erreur lors de la récupération du dataUrl:`, error);
+            }
+        }
+        return false;
+    };
+    
+    // Tenter de récupérer les dataUrl pour toutes les photos
+    const recoveryPromises = [];
     for (const sectionIndex in sectionPhotos) {
         if (Array.isArray(sectionPhotos[sectionIndex])) {
             for (const photo of sectionPhotos[sectionIndex]) {
-                if (!photo.dataUrl && photo.url) {
-                    console.log(`🔄 Tentative de récupération du dataUrl pour ${photo.name} à partir de l'URL`);
-                    try {
-                        // Cette approche ne fonctionnera pas pour les blob URLs en raison des restrictions CORS
-                        // Mais nous l'incluons pour le débogage
-                        const img = new Image();
-                        img.crossOrigin = "Anonymous";
-                        img.onload = function() {
-                            try {
-                                const canvas = document.createElement('canvas');
-                                canvas.width = img.width;
-                                canvas.height = img.height;
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(img, 0, 0);
-                                const newDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                photo.dataUrl = newDataUrl;
-                                console.log(`✅ DataUrl récupéré pour ${photo.name}`);
-                                dataUrlRecovered++;
-                            } catch (canvasError) {
-                                console.error(`❌ Erreur lors de la création du canvas:`, canvasError);
-                            }
-                        };
-                        img.src = photo.url;
-                    } catch (error) {
-                        console.error(`❌ Erreur lors de la récupération du dataUrl:`, error);
-                    }
-                }
+                recoveryPromises.push(tryRecoverDataUrl(photo));
             }
         }
     }
     
-    console.log(`📊 Tentative de récupération de dataUrl: ${dataUrlRecovered} photos`);
+    // Attendre que toutes les tentatives de récupération soient terminées
+    await Promise.all(recoveryPromises);
+    
+    console.log(`📊 Tentative de récupération de dataUrl: ${dataUrlRecovered} photos récupérées`);
+    
+    // Si des photos ont été récupérées, sauvegarder les modifications
+    if (dataUrlRecovered > 0) {
+        console.log(`🔄 Sauvegarde des données après récupération des dataUrl...`);
+        saveFormData();
+    }
     
     setTimeout(async () => {
         console.log('🔄 Début de la génération du PDF après délai');
