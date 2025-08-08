@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>État des Lieux Ascenseur</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>🏢 État des Lieux Ascenseur</h1>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+                <span class="progress-text" id="progressText">0/11 sections</span>
+            </div>
+        </header>
+
+        <nav class="section-nav" id="sectionNav">
+            <button class="nav-btn active" data-section="0">🏢 Identification</button>
+            <button class="nav-btn" data-section="1">🏠 Cabine</button>
+            <button class="nav-btn" data-section="2">🚪 Portes Palières</button>
+            <button class="nav-btn" data-section="3">🚪 Porte Cabine</button>
+            <button class="nav-btn" data-section="4">🏗️ Toit Cabine</button>
+            <button class="nav-btn" data-section="5">🔒 Commande/Sécurité</button>
+            <button class="nav-btn" data-section="6">🕳️ Gaines/Cuvette</button>
+            <button class="nav-btn" data-section="7">⚖️ Contrepoids</button>
+            <button class="nav-btn" data-section="8">🏭 Local Machine</button>
+            <button class="nav-btn" data-section="9">📝 Conclusion</button>
+            <button class="nav-btn" data-section="10">✍️ Signatures</button>
+        </nav>
+
+        <main class="form-container">
+            <form id="elevatorForm">
+                
+                <!-- Section 1: Identification -->
+                <div class="section active" id="section-0">
+                    <h2>🏢 1. Identification</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="adresse">Adresse du site *</label>
+                        <input type="text" class="form-control" id="adresse" name="adresse" required placeholder="Ex: 123 Rue de la Paix, Lyon">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="numero_appareil">Numéro d'appareil *</label>
+                        <input type="text" class="form-control" id="numero_appareil" name="numero_appareil" required placeholder="Ex: ASC001">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fabricant">Fabricant</label>
+                        <input type="text" class="form-control" id="fabricant" name="fabricant" placeholder="Ex: OTIS, SCHINDLER, KONE">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="annee_installation">Année d'installation</label>
+                        <input type="number" class="form-control" id="annee_installation" name="annee_installation" min="1950" max="2025">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="date_visite">Date de visite *</label>
+                        <input type="date" class="form-control" id="date_visite" name="date_visite" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="nom_technicien">Nom du technicien *</label>
+                        <input type="text" class="form-control" id="nom_technicien" name="nom_technicien" required placeholder="Votre nom">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="interlocuteur_client">Interlocuteur client</label>
+                        <input type="text" class="form-control" id="interlocuteur_client" name="interlocuteur_client" placeholder="Nom du contact sur site">
+                    </div>
+                    
+                    <!-- Photos pour Identification -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-0" accept="image/*" multiple class="photo-input">
+                            <label for="photos-0" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-0"></div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Cabine -->
+                <div class="section" id="section-1">
+                    <h2>🏠 2. Cabine</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="etat_interieur">État général intérieur *</label>
+                        <select class="form-control" id="etat_interieur" name="etat_interieur" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Moyen">Moyen</option>
+                            <option value="Mauvais">Mauvais</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="etat_interieur_obs">Observations</label>
+                        <textarea class="form-control" id="etat_interieur_obs" name="etat_interieur_obs" rows="2" placeholder="Détails sur l'état général..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="boutons_commande">Boutons de commande *</label>
+                        <select class="form-control" id="boutons_commande" name="boutons_commande" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnels">Fonctionnels</option>
+                            <option value="Fonctionnel vétuste">Fonctionnel vétuste</option>
+                            <option value="Défaillants">Défaillants</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="boutons_obs">Détails</label>
+                        <textarea class="form-control" id="boutons_obs" name="boutons_obs" rows="2" placeholder="Précisions sur les boutons..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="eclairage">Éclairage cabine *</label>
+                        <select class="form-control" id="eclairage" name="eclairage" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Partiel">Partiel</option>
+                            <option value="À remplacer">À remplacer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="eclairage_obs">Détails</label>
+                        <textarea class="form-control" id="eclairage_obs" name="eclairage_obs" rows="2" placeholder="État de l'éclairage..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="signalisation">Signalisation sonore/visuelle *</label>
+                        <select class="form-control" id="signalisation" name="signalisation" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionne">Fonctionne</option>
+                            <option value="Ne fonctionne pas">Ne fonctionne pas</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="signalisation_obs">Détails</label>
+                        <textarea class="form-control" id="signalisation_obs" name="signalisation_obs" rows="2" placeholder="Observations sur la signalisation..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="nivellement">Nivellement *</label>
+                        <select class="form-control" id="nivellement" name="nivellement" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Correct">Correct</option>
+                            <option value="Défaillant">Défaillant</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="nivellement_obs">Détails</label>
+                        <textarea class="form-control" id="nivellement_obs" name="nivellement_obs" rows="2" placeholder="Problèmes de nivellement..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Cabine -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-1" accept="image/*" multiple class="photo-input">
+                            <label for="photos-1" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-1"></div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Portes Palières -->
+                <div class="section" id="section-2">
+                    <h2>🚫 3. Portes Palières</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="type_porte">Type de porte *</label>
+                        <select class="form-control" id="type_porte" name="type_porte" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Battante">Battante</option>
+                            <option value="Automatique">Automatique</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fonctionnement_portes">Fonctionnement des portes *</label>
+                        <select class="form-control" id="fonctionnement_portes" name="fonctionnement_portes" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Défaillant">Défaillant</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fonctionnement_obs">Détails par étage</label>
+                        <textarea class="form-control" id="fonctionnement_obs" name="fonctionnement_obs" rows="3" placeholder="État par niveau (RDC, 1er, 2ème...)"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="dispositifs_securite">Dispositifs de sécurité *</label>
+                        <select class="form-control" id="dispositifs_securite" name="dispositifs_securite" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Conformes">Conformes</option>
+                            <option value="Non conformes">Non conformes</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="securite_obs">Détails</label>
+                        <textarea class="form-control" id="securite_obs" name="securite_obs" rows="2" placeholder="Contacts, verrouillages..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="alignement">Alignement et état mécanique *</label>
+                        <select class="form-control" id="alignement" name="alignement" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Réglages nécessaires">Réglages nécessaires</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="alignement_obs">Détails</label>
+                        <textarea class="form-control" id="alignement_obs" name="alignement_obs" rows="2" placeholder="Problèmes d'alignement..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_rails">Propreté rails et seuils *</label>
+                        <select class="form-control" id="proprete_rails" name="proprete_rails" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Propre">Propre</option>
+                            <option value="À nettoyer">À nettoyer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_obs">Détails</label>
+                        <textarea class="form-control" id="proprete_obs" name="proprete_obs" rows="2" placeholder="État de propreté..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Portes Palières -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-2" accept="image/*" multiple class="photo-input">
+                            <label for="photos-2" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-2"></div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Porte Cabine -->
+                <div class="section" id="section-3">
+                    <h2>🚪 4. Porte Cabine</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="etat_porte_cabine">État général porte cabine *</label>
+                        <select class="form-control" id="etat_porte_cabine" name="etat_porte_cabine" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Moyen">Moyen</option>
+                            <option value="Mauvais">Mauvais</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="porte_cabine_obs">Observations</label>
+                        <textarea class="form-control" id="porte_cabine_obs" name="porte_cabine_obs" rows="2" placeholder="État de la porte cabine..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="mecanisme_ouverture">Mécanisme d'ouverture *</label>
+                        <select class="form-control" id="mecanisme_ouverture" name="mecanisme_ouverture" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Défaillant">Défaillant</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="mecanisme_obs">Détails</label>
+                        <textarea class="form-control" id="mecanisme_obs" name="mecanisme_obs" rows="2" placeholder="Fonctionnement du mécanisme..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="securite_porte_cabine">Sécurité porte cabine *</label>
+                        <select class="form-control" id="securite_porte_cabine" name="securite_porte_cabine" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Conforme">Conforme</option>
+                            <option value="Non conforme">Non conforme</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="securite_porte_obs">Détails</label>
+                        <textarea class="form-control" id="securite_porte_obs" name="securite_porte_obs" rows="2" placeholder="Dispositifs de sécurité..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Porte Cabine -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-3" accept="image/*" multiple class="photo-input">
+                            <label for="photos-3" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-3"></div>
+                    </div>
+                </div>
+
+                <!-- Section 5: Toit de Cabine -->
+                <div class="section" id="section-4">
+                    <h2>🏗️ 5. Toit de Cabine</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="etat_toit">État général toit cabine *</label>
+                        <select class="form-control" id="etat_toit" name="etat_toit" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Moyen">Moyen</option>
+                            <option value="Mauvais">Mauvais</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="toit_obs">Observations</label>
+                        <textarea class="form-control" id="toit_obs" name="toit_obs" rows="2" placeholder="État du toit de cabine..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="acces_toit">Accès toit cabine *</label>
+                        <select class="form-control" id="acces_toit" name="acces_toit" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Sécurisé">Sécurisé</option>
+                            <option value="Non sécurisé">Non sécurisé</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="acces_toit_obs">Détails</label>
+                        <textarea class="form-control" id="acces_toit_obs" name="acces_toit_obs" rows="2" placeholder="Conditions d'accès..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="equipements_toit">Équipements sur toit *</label>
+                        <select class="form-control" id="equipements_toit" name="equipements_toit" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Conformes">Conformes</option>
+                            <option value="Non conformes">Non conformes</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="equipements_obs">Détails</label>
+                        <textarea class="form-control" id="equipements_obs" name="equipements_obs" rows="2" placeholder="Équipements présents..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Toit de Cabine -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-4" accept="image/*" multiple class="photo-input">
+                            <label for="photos-4" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-4"></div>
+                    </div>
+                </div>
+
+                <!-- Section 6: Commande et Sécurité -->
+                <div class="section" id="section-5">
+                    <h2>🔒 6. Commande et Sécurité</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="manoeuvre_secours">Manœuvre de secours *</label>
+                        <select class="form-control" id="manoeuvre_secours" name="manoeuvre_secours" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnelle">Fonctionnelle</option>
+                            <option value="Défaillante">Défaillante</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="manoeuvre_obs">Détails</label>
+                        <textarea class="form-control" id="manoeuvre_obs" name="manoeuvre_obs" rows="2" placeholder="Test de la manœuvre..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="parachute">Parachute *</label>
+                        <select class="form-control" id="parachute" name="parachute" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnel">Non fonctionnel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="parachute_obs">Détails</label>
+                        <textarea class="form-control" id="parachute_obs" name="parachute_obs" rows="2" placeholder="État du parachute..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fins_courses">Fins de courses *</label>
+                        <select class="form-control" id="fins_courses" name="fins_courses" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnels">Fonctionnels</option>
+                            <option value="Non fonctionnels">Non fonctionnels</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fins_courses_obs">Détails</label>
+                        <textarea class="form-control" id="fins_courses_obs" name="fins_courses_obs" rows="2" placeholder="État des fins de courses..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="alarme_telephone">Voyant d'alarme/téléphone *</label>
+                        <select class="form-control" id="alarme_telephone" name="alarme_telephone" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Défaillant">Défaillant</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="alarme_obs">Détails</label>
+                        <textarea class="form-control" id="alarme_obs" name="alarme_obs" rows="2" placeholder="Test alarme et communication..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Commande et Sécurité -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-5" accept="image/*" multiple class="photo-input">
+                            <label for="photos-5" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-5"></div>
+                    </div>
+                </div>
+
+                <!-- Section 7: Gaines et Cuvette -->
+                <div class="section" id="section-6">
+                    <h2>🕳️ 7. Gaines et Cuvette</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_gaine">Propreté gaine et cuvette *</label>
+                        <select class="form-control" id="proprete_gaine" name="proprete_gaine" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Propre">Propre</option>
+                            <option value="Sale">Sale</option>
+                            <option value="Présence débris">Présence débris</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_gaine_obs">Détails</label>
+                        <textarea class="form-control" id="proprete_gaine_obs" name="proprete_gaine_obs" rows="2" placeholder="État de la gaine..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="etat_cables">État des câbles/chaînes *</label>
+                        <select class="form-control" id="etat_cables" name="etat_cables" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Usure visible">Usure visible</option>
+                            <option value="À remplacer">À remplacer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cables_obs">Détails</label>
+                        <textarea class="form-control" id="cables_obs" name="cables_obs" rows="2" placeholder="Usure, tension, fixation..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lubrification">Lubrification pièces *</label>
+                        <select class="form-control" id="lubrification" name="lubrification" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Correcte">Correcte</option>
+                            <option value="Insuffisante">Insuffisante</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="lubrification_obs">Détails</label>
+                        <textarea class="form-control" id="lubrification_obs" name="lubrification_obs" rows="2" placeholder="Points à lubrifier..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="poulie_tendeuse">Poulie tendeuse *</label>
+                        <select class="form-control" id="poulie_tendeuse" name="poulie_tendeuse" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Contact fonctionnel">Contact fonctionnel</option>
+                            <option value="Contact non fonctionnel">Contact non fonctionnel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="poulie_tendeuse_obs">Détails</label>
+                        <textarea class="form-control" id="poulie_tendeuse_obs" name="poulie_tendeuse_obs" rows="2" placeholder="État de la poulie tendeuse..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cablette_limiteur">Câblette limiteur *</label>
+                        <select class="form-control" id="cablette_limiteur" name="cablette_limiteur" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bonne">Bonne</option>
+                            <option value="À retendre">À retendre</option>
+                            <option value="À remplacer">À remplacer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cablette_obs">Détails</label>
+                        <textarea class="form-control" id="cablette_obs" name="cablette_obs" rows="2" placeholder="État de la câblette..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="bouton_stop_cuvette">Bouton stop cuvette *</label>
+                        <select class="form-control" id="bouton_stop_cuvette" name="bouton_stop_cuvette" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnel">Non fonctionnel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="bouton_stop_obs">Détails</label>
+                        <textarea class="form-control" id="bouton_stop_obs" name="bouton_stop_obs" rows="2" placeholder="Test du bouton stop..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Gaines et Cuvette -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-6" accept="image/*" multiple class="photo-input">
+                            <label for="photos-6" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-6"></div>
+                    </div>
+                </div>
+
+                <!-- Section 8: Contrepoids -->
+                <div class="section" id="section-7">
+                    <h2>⚖️ 8. Contrepoids et Mécanismes</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="contrepoids_etat">Vérification contrepoids *</label>
+                        <select class="form-control" id="contrepoids_etat" name="contrepoids_etat" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fixation OK">Fixation OK</option>
+                            <option value="Problème">Problème</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="contrepoids_obs">Détails</label>
+                        <textarea class="form-control" id="contrepoids_obs" name="contrepoids_obs" rows="2" placeholder="Fixation, guidage..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="poulies_galets">Inspection poulies/galets *</label>
+                        <select class="form-control" id="poulies_galets" name="poulies_galets" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon état">Bon état</option>
+                            <option value="Usure">Usure</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="poulies_obs">Détails</label>
+                        <textarea class="form-control" id="poulies_obs" name="poulies_obs" rows="2" placeholder="Usure des poulies..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Contrepoids -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-7" accept="image/*" multiple class="photo-input">
+                            <label for="photos-7" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-7"></div>
+                    </div>
+                </div>
+
+                <!-- Section 9: Local Machine -->
+                <div class="section" id="section-8">
+                    <h2>🏭 9. Local Machine</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="acces_securise">Accès sécurisé *</label>
+                        <select class="form-control" id="acces_securise" name="acces_securise" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Conforme">Conforme</option>
+                            <option value="Non conforme">Non conforme</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="acces_obs">Détails</label>
+                        <textarea class="form-control" id="acces_obs" name="acces_obs" rows="2" placeholder="Clés, éclairage, aération..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="moteur_armoire">État moteur/armoire électrique *</label>
+                        <select class="form-control" id="moteur_armoire" name="moteur_armoire" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Bon">Bon</option>
+                            <option value="Vétuste">Vétuste</option>
+                            <option value="Révision nécessaire">Révision nécessaire</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="moteur_obs">Détails</label>
+                        <textarea class="form-control" id="moteur_obs" name="moteur_obs" rows="2" placeholder="État du moteur et électricité..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_local">Propreté et rangement *</label>
+                        <select class="form-control" id="proprete_local" name="proprete_local" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Correct">Correct</option>
+                            <option value="À améliorer">À améliorer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="proprete_local_obs">Détails</label>
+                        <textarea class="form-control" id="proprete_local_obs" name="proprete_local_obs" rows="2" placeholder="Encombrement, propreté..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="schemas_notices">Schémas et notices présents *</label>
+                        <select class="form-control" id="schemas_notices" name="schemas_notices" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Oui">Oui</option>
+                            <option value="Non">Non</option>
+                            <option value="Partiels">Partiels</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="schemas_obs">Détails</label>
+                        <textarea class="form-control" id="schemas_obs" name="schemas_obs" rows="2" placeholder="Documents disponibles..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="boitier_rappel">Boîtier de rappel *</label>
+                        <select class="form-control" id="boitier_rappel" name="boitier_rappel" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnel">Non fonctionnel</option>
+                            <option value="Non présent">Non présent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="boitier_rappel_obs">Détails</label>
+                        <textarea class="form-control" id="boitier_rappel_obs" name="boitier_rappel_obs" rows="2" placeholder="État du boîtier de rappel..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="differentiel_dtu">Différentiel DTU *</label>
+                        <select class="form-control" id="differentiel_dtu" name="differentiel_dtu" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnels">Non fonctionnels</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="differentiel_obs">Détails</label>
+                        <textarea class="form-control" id="differentiel_obs" name="differentiel_obs" rows="2" placeholder="État du différentiel DTU..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="bloc_secours">Bloc secours *</label>
+                        <select class="form-control" id="bloc_secours" name="bloc_secours" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnels">Non fonctionnels</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="bloc_secours_obs">Détails</label>
+                        <textarea class="form-control" id="bloc_secours_obs" name="bloc_secours_obs" rows="2" placeholder="État du bloc secours..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="kit_consignation">Kit de consignation DTU *</label>
+                        <select class="form-control" id="kit_consignation" name="kit_consignation" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Présent">Présent</option>
+                            <option value="Absent">Absent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="kit_consignation_obs">Détails</label>
+                        <textarea class="form-control" id="kit_consignation_obs" name="kit_consignation_obs" rows="2" placeholder="Présence du kit de consignation..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="verrou_anti_panique">Verrou anti panique *</label>
+                        <select class="form-control" id="verrou_anti_panique" name="verrou_anti_panique" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Présent">Présent</option>
+                            <option value="Absent">Absent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="verrou_obs">Détails</label>
+                        <textarea class="form-control" id="verrou_obs" name="verrou_obs" rows="2" placeholder="Présence du verrou anti panique..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="eclairage_machinerie">Éclairage machinerie *</label>
+                        <select class="form-control" id="eclairage_machinerie" name="eclairage_machinerie" required>
+                            <option value="">Sélectionner...</option>
+                            <option value="Fonctionnel">Fonctionnel</option>
+                            <option value="Non fonctionnels">Non fonctionnels</option>
+                            <option value="Partiel">Partiel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="eclairage_machinerie_obs">Détails</label>
+                        <textarea class="form-control" id="eclairage_machinerie_obs" name="eclairage_machinerie_obs" rows="2" placeholder="État de l'éclairage..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Local Machine -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-8" accept="image/*" multiple class="photo-input">
+                            <label for="photos-8" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-8"></div>
+                    </div>
+                </div>
+
+                <!-- Section 10: Conclusion et Observations -->
+                <div class="section" id="section-9">
+                    <h2>📝 10. Conclusion et Observations</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="anomalies_constatees">Anomalies constatées</label>
+                        <textarea class="form-control" id="anomalies_constatees" name="anomalies_constatees" rows="4" placeholder="Listez toutes les anomalies observées..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="pieces_vetustes">Pièces vétustes repérées</label>
+                        <textarea class="form-control" id="pieces_vetustes" name="pieces_vetustes" rows="3" placeholder="Éléments nécessitant un remplacement..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="urgences_suggestions">Urgences/Suggestions</label>
+                        <textarea class="form-control" id="urgences_suggestions" name="urgences_suggestions" rows="3" placeholder="Actions prioritaires à prévoir..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="conclusion_generale">Conclusion générale</label>
+                        <textarea class="form-control" id="conclusion_generale" name="conclusion_generale" rows="4" placeholder="Synthèse de l'état général de l'ascenseur..."></textarea>
+                    </div>
+                    
+                    <!-- Photos pour Conclusion -->
+                    <div class="photo-section">
+                        <h4>📸 Photos (max 6)</h4>
+                        <div class="photo-upload">
+                            <input type="file" id="photos-9" accept="image/*" multiple class="photo-input">
+                            <label for="photos-9" class="photo-label">Ajouter des photos</label>
+                        </div>
+                        <div class="photo-preview" id="photo-preview-9"></div>
+                    </div>
+                </div>
+
+                <!-- Section 11: Signatures -->
+                <div class="section" id="section-10">
+                    <h2>✍️ 11. Signatures</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="nom_technicien_final">Nom du technicien *</label>
+                        <input type="text" class="form-control" id="nom_technicien_final" name="nom_technicien_final" required placeholder="Nom et prénom du technicien">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="signature_technicien" name="signature_technicien" required>
+                            <span class="checkmark"></span>
+                            Document signé par le technicien *
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="nom_client_final">Nom du client/gestionnaire *</label>
+                        <input type="text" class="form-control" id="nom_client_final" name="nom_client_final" required placeholder="Nom du représentant client">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="signature_client" name="signature_client" required>
+                            <span class="checkmark"></span>
+                            Document signé par le client *
+                        </label>
+                    </div>
+                </div>
+
+            </form>
+        </main>
+
+        <div class="actions-container">
+            <button class="btn btn--outline" id="nextBtn">Suivant</button>
+            <button class="btn btn--primary btn--full-width" id="generatePDF" style="display: none;">Générer le rapport PDF</button>
+            <button class="btn btn--secondary btn--full-width" id="newInspection" style="display: none;">Nouvelle inspection</button>
+        </div>
+
+        <div class="toast" id="toast"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
