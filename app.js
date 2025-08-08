@@ -313,106 +313,264 @@ function handlePhotoUpload(event, sectionIndex) {
 
 // Compress and correct image orientation
 function compressImage(file) {
-    return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        img.onload = function() {
-            // Check if EXIF library is available
-            if (typeof EXIF !== 'undefined') {
-                // Get EXIF orientation data
-                EXIF.getData(file, function() {
-                    const orientation = EXIF.getTag(this, 'Orientation') || 1;
-                    processImageWithOrientation(img, canvas, ctx, orientation, resolve);
-                });
-            } else {
-                // Fallback without EXIF processing
-                processImageWithOrientation(img, canvas, ctx, 1, resolve);
-            }
-        };
-        
-        img.src = URL.createObjectURL(file);
+    return new Promise((resolve, reject) => {
+        try {
+            console.log(`🔄 Compression de l'image ${file.name} (taille originale: ${(file.size / 1024).toFixed(2)} KB)...`);
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            // Définir un seul gestionnaire onload pour éviter les duplications
+            img.onload = function() {
+                try {
+                    URL.revokeObjectURL(img.src); // Nettoyer l'URL de l'objet immédiatement
+                    console.log(`✅ Image chargée avec succès: ${img.width}x${img.height}`);
+                    
+                    // Check if EXIF library is available
+                    if (typeof EXIF !== 'undefined') {
+                        // Get EXIF orientation data
+                        EXIF.getData(file, function() {
+                            try {
+                                const orientation = EXIF.getTag(this, 'Orientation') || 1;
+                                console.log(`📏 Orientation EXIF détectée: ${orientation}`);
+                                processImageWithOrientation(img, canvas, ctx, orientation, file, resolve, reject);
+                            } catch (exifError) {
+                                console.error(`❌ Erreur lors du traitement EXIF:`, exifError);
+                                // Fallback without EXIF processing
+                                processImageWithOrientation(img, canvas, ctx, 1, file, resolve, reject);
+                            }
+                        });
+                    } else {
+                        console.log(`ℹ️ Bibliothèque EXIF non disponible, traitement sans correction d'orientation`);
+                        // Fallback without EXIF processing
+                        processImageWithOrientation(img, canvas, ctx, 1, file, resolve, reject);
+                    }
+                } catch (error) {
+                    console.error(`❌ Erreur dans le gestionnaire onload:`, error);
+                    reject(error);
+                }
+            };
+            
+            img.onerror = function(error) {
+                console.error(`❌ Erreur lors du chargement de l'image:`, error);
+                URL.revokeObjectURL(img.src); // Nettoyer l'URL même en cas d'erreur
+                reject(new Error(`Erreur lors du chargement de l'image: ${error}`));
+            };
+            
+            // Définir un timeout pour éviter les blocages
+            const timeout = setTimeout(() => {
+                console.error(`⏱️ Timeout lors du chargement de l'image ${file.name}`);
+                URL.revokeObjectURL(img.src);
+                reject(new Error(`Timeout lors du chargement de l'image ${file.name}`));
+            }, 10000); // 10 secondes de timeout
+            
+            // Modifier le gestionnaire onload pour annuler le timeout
+            const originalOnload = img.onload;
+            img.onload = function(e) {
+                clearTimeout(timeout);
+                originalOnload.call(this, e);
+            };
+            
+            const objectURL = URL.createObjectURL(file);
+            console.log(`🔗 URL de l'objet créée pour ${file.name}`);
+            img.src = objectURL;
+        } catch (error) {
+            console.error(`❌ Erreur globale dans compressImage:`, error);
+            reject(error);
+        }
     });
 }
 
-function processImageWithOrientation(img, canvas, ctx, orientation, resolve) {
-    // Preserve aspect ratio while limiting size
-    let { width, height } = img;
-    const maxSize = 800;
-    
-    // Calculate new dimensions preserving aspect ratio
-    if (width > height && width > maxSize) {
-        height = (height * maxSize) / width;
-        width = maxSize;
-    } else if (height > maxSize) {
-        width = (width * maxSize) / height;
-        height = maxSize;
+function processImageWithOrientation(img, canvas, ctx, orientation, originalFile, resolve, reject) {
+    try {
+        // Preserve aspect ratio while limiting size
+        let { width, height } = img;
+        console.log(`📏 Dimensions originales: ${width}x${height}`);
+        
+        // Déterminer la taille maximale en fonction de la taille du fichier original
+        // Plus le fichier est grand, plus on réduit la taille maximale
+        const fileSizeKB = originalFile.size / 1024;
+        const fileSizeMB = fileSizeKB / 1024;
+        
+        // Ajuster la taille maximale en fonction de la taille du fichier
+        let maxSize;
+        if (fileSizeMB > 10) { // Plus de 10MB
+            maxSize = 500;
+            console.log(`📏 Fichier extrêmement volumineux (${fileSizeMB.toFixed(2)} MB), réduction à ${maxSize}px max`);
+        } else if (fileSizeMB > 5) { // Plus de 5MB
+            maxSize = 600;
+            console.log(`📏 Fichier très volumineux (${fileSizeMB.toFixed(2)} MB), réduction à ${maxSize}px max`);
+        } else if (fileSizeMB > 2) { // Plus de 2MB
+            maxSize = 700;
+            console.log(`📏 Fichier volumineux (${fileSizeMB.toFixed(2)} MB), réduction à ${maxSize}px max`);
+        } else if (fileSizeMB > 1) { // Plus de 1MB
+            maxSize = 800;
+            console.log(`📏 Fichier de taille moyenne (${fileSizeMB.toFixed(2)} MB), réduction à ${maxSize}px max`);
+        } else {
+            maxSize = 1000; // Pour les petits fichiers, on peut garder une meilleure résolution
+            console.log(`📏 Fichier de petite taille (${fileSizeMB.toFixed(2)} MB), réduction à ${maxSize}px max`);
+        }
+        
+        // Réduire davantage si l'image est très grande en dimensions
+        const megapixels = (width * height) / 1000000;
+        if (megapixels > 12) { // Images très haute résolution
+            maxSize = Math.min(maxSize, 600);
+            console.log(`📏 Image très haute résolution (${megapixels.toFixed(2)} MP), limitation supplémentaire à ${maxSize}px`);
+        } else if (megapixels > 8) {
+            maxSize = Math.min(maxSize, 700);
+            console.log(`📏 Image haute résolution (${megapixels.toFixed(2)} MP), limitation supplémentaire à ${maxSize}px`);
+        }
+        
+        // Calculate new dimensions preserving aspect ratio
+        if (width > height && width > maxSize) {
+            height = Math.floor((height * maxSize) / width);
+            width = maxSize;
+        } else if (height > maxSize) {
+            width = Math.floor((width * maxSize) / height);
+            height = maxSize;
+        }
+        
+        console.log(`📏 Nouvelles dimensions après redimensionnement: ${width}x${height}`);
+        
+        // Set canvas dimensions based on orientation
+        let canvasWidth = width;
+        let canvasHeight = height;
+        
+        if (orientation >= 5 && orientation <= 8) {
+            // Swap dimensions for rotated images
+            canvasWidth = height;
+            canvasHeight = width;
+            console.log(`📏 Dimensions du canvas après rotation: ${canvasWidth}x${canvasHeight}`);
+        }
+        
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        
+        // Apply rotation transformation based on EXIF orientation
+        ctx.save();
+        switch (orientation) {
+            case 2:
+                // Flip horizontal
+                ctx.scale(-1, 1);
+                ctx.translate(-canvasWidth, 0);
+                console.log(`🔄 Application du retournement horizontal`);
+                break;
+            case 3:
+                // Rotate 180°
+                ctx.rotate(Math.PI);
+                ctx.translate(-canvasWidth, -canvasHeight);
+                console.log(`🔄 Application de la rotation 180°`);
+                break;
+            case 4:
+                // Flip vertical
+                ctx.scale(1, -1);
+                ctx.translate(0, -canvasHeight);
+                console.log(`🔄 Application du retournement vertical`);
+                break;
+            case 5:
+                // Rotate 90° CCW + flip horizontal
+                ctx.rotate(-Math.PI / 2);
+                ctx.scale(-1, 1);
+                ctx.translate(-canvasHeight, -canvasWidth);
+                console.log(`🔄 Application de la rotation 90° CCW + retournement horizontal`);
+                break;
+            case 6:
+                // Rotate 90° CW
+                ctx.rotate(Math.PI / 2);
+                ctx.translate(0, -canvasHeight);
+                console.log(`🔄 Application de la rotation 90° CW`);
+                break;
+            case 7:
+                // Rotate 90° CW + flip horizontal
+                ctx.rotate(Math.PI / 2);
+                ctx.scale(-1, 1);
+                ctx.translate(-canvasWidth, -canvasHeight);
+                console.log(`🔄 Application de la rotation 90° CW + retournement horizontal`);
+                break;
+            case 8:
+                // Rotate 90° CCW
+                ctx.rotate(-Math.PI / 2);
+                ctx.translate(-canvasWidth, 0);
+                console.log(`🔄 Application de la rotation 90° CCW`);
+                break;
+            default:
+                // No rotation needed
+                console.log(`ℹ️ Aucune rotation nécessaire`);
+                break;
+        }
+        
+        // Améliorer la qualité du rendu
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw image with correct orientation and preserved ratio
+        ctx.drawImage(img, 0, 0, width, height);
+        ctx.restore();
+        
+        // Déterminer la qualité de compression en fonction de la taille du fichier original
+        // Compression plus agressive pour les fichiers plus volumineux
+        let compressionQuality;
+        
+        if (fileSizeMB > 10) { // Plus de 10MB
+            compressionQuality = 0.4; // 40% de qualité
+            console.log(`🔧 Fichier extrêmement volumineux, compression très agressive (qualité: ${compressionQuality})`);
+        } else if (fileSizeMB > 5) { // Plus de 5MB
+            compressionQuality = 0.5; // 50% de qualité
+            console.log(`🔧 Fichier très volumineux, compression agressive (qualité: ${compressionQuality})`);
+        } else if (fileSizeMB > 2) { // Plus de 2MB
+            compressionQuality = 0.6; // 60% de qualité
+            console.log(`🔧 Fichier volumineux, compression moyenne (qualité: ${compressionQuality})`);
+        } else if (fileSizeMB > 1) { // Plus de 1MB
+            compressionQuality = 0.7; // 70% de qualité
+            console.log(`🔧 Fichier de taille moyenne, compression standard (qualité: ${compressionQuality})`);
+        } else {
+            compressionQuality = 0.8; // 80% de qualité pour les petits fichiers
+            console.log(`🔧 Fichier de petite taille, compression légère (qualité: ${compressionQuality})`);
+        }
+        
+        // Tentative de compression avec la qualité déterminée
+        canvas.toBlob(
+            (blob) => {
+                if (blob) {
+                    const compressionRatio = blob.size / originalFile.size;
+                    console.log(`✅ Image compressée avec succès: ${(blob.size / 1024).toFixed(2)} KB (réduction de ${((1 - compressionRatio) * 100).toFixed(2)}%)`);
+                    
+                    // Si la compression n'est pas suffisante (réduction < 30%) et que le fichier est encore gros,
+                    // essayer une compression plus agressive
+                    if (compressionRatio > 0.7 && blob.size > 500 * 1024) {
+                        console.log(`🔄 Compression insuffisante, tentative avec une qualité plus basse...`);
+                        const lowerQuality = Math.max(0.3, compressionQuality - 0.2);
+                        console.log(`🔧 Nouvelle qualité: ${lowerQuality}`);
+                        
+                        canvas.toBlob(
+                            (secondBlob) => {
+                                if (secondBlob) {
+                                    console.log(`✅ Seconde compression: ${(secondBlob.size / 1024).toFixed(2)} KB (réduction de ${((1 - secondBlob.size / originalFile.size) * 100).toFixed(2)}%)`);
+                                    resolve(secondBlob);
+                                } else {
+                                    console.log(`⚠️ Échec de la seconde compression, utilisation du premier résultat`);
+                                    resolve(blob);
+                                }
+                            },
+                            'image/jpeg',
+                            lowerQuality
+                        );
+                    } else {
+                        resolve(blob);
+                    }
+                } else {
+                    console.error(`❌ Échec de la compression: blob null`);
+                    reject(new Error('Échec de la compression: blob null'));
+                }
+            },
+            'image/jpeg',
+            compressionQuality
+        );
+    } catch (error) {
+        console.error(`❌ Erreur lors du traitement de l'image:`, error);
+        reject(error);
     }
-    
-    // Set canvas dimensions based on orientation
-    let canvasWidth = width;
-    let canvasHeight = height;
-    
-    if (orientation >= 5 && orientation <= 8) {
-        // Swap dimensions for rotated images
-        canvasWidth = height;
-        canvasHeight = width;
-    }
-    
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    
-    // Apply rotation transformation based on EXIF orientation
-    ctx.save();
-    switch (orientation) {
-        case 2:
-            // Flip horizontal
-            ctx.scale(-1, 1);
-            ctx.translate(-canvasWidth, 0);
-            break;
-        case 3:
-            // Rotate 180°
-            ctx.rotate(Math.PI);
-            ctx.translate(-canvasWidth, -canvasHeight);
-            break;
-        case 4:
-            // Flip vertical
-            ctx.scale(1, -1);
-            ctx.translate(0, -canvasHeight);
-            break;
-        case 5:
-            // Rotate 90° CCW + flip horizontal
-            ctx.rotate(-Math.PI / 2);
-            ctx.scale(-1, 1);
-            ctx.translate(-canvasHeight, -canvasWidth);
-            break;
-        case 6:
-            // Rotate 90° CW
-            ctx.rotate(Math.PI / 2);
-            ctx.translate(0, -canvasHeight);
-            break;
-        case 7:
-            // Rotate 90° CW + flip horizontal
-            ctx.rotate(Math.PI / 2);
-            ctx.scale(-1, 1);
-            ctx.translate(-canvasWidth, -canvasHeight);
-            break;
-        case 8:
-            // Rotate 90° CCW
-            ctx.rotate(-Math.PI / 2);
-            ctx.translate(-canvasWidth, 0);
-            break;
-        default:
-            // No rotation needed
-            break;
-    }
-    
-    // Draw image with correct orientation and preserved ratio
-    ctx.drawImage(img, 0, 0, width, height);
-    ctx.restore();
-    
-    canvas.toBlob(resolve, 'image/jpeg', 0.8);
 }
 
 // Update photo preview for a section
@@ -1144,51 +1302,114 @@ async function generatePDF() {
     // Fonction pour tenter de récupérer un dataUrl à partir d'une URL
     const tryRecoverDataUrl = async (photo) => {
         if (!photo.dataUrl && photo.url) {
-            console.log(`🔄 Tentative de récupération du dataUrl pour ${photo.name} à partir de l'URL`);
-            try {
-                // Créer une image et la dessiner sur un canvas pour récupérer le dataUrl
-                const img = new Image();
-                img.crossOrigin = "Anonymous"; // Nécessaire pour les URL externes
+            console.log(`🔄 Tentative de récupération du dataUrl pour ${photo.name || 'Sans nom'} à partir de l'URL`);
+            
+            // Fonction pour détecter le format d'image à partir de l'URL ou du contenu
+            const detectImageFormat = (url, fallback = 'image/jpeg') => {
+                if (!url) return fallback;
                 
-                // Utiliser une promesse avec timeout pour éviter de bloquer
-                const dataUrlPromise = new Promise((resolve) => {
-                    img.onload = function() {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            const newDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                            resolve(newDataUrl);
-                        } catch (canvasError) {
-                            console.error(`❌ Erreur lors de la création du canvas:`, canvasError);
-                            resolve(null);
-                        }
-                    };
-                    img.onerror = () => {
-                        console.error(`❌ Erreur de chargement de l'image`);
-                        resolve(null);
-                    };
-                    
-                    // Timeout de 2 secondes
-                    setTimeout(() => resolve(null), 2000);
-                });
+                // Détection par extension de fichier
+                if (url.match(/\.png(\?|#|$)/i)) return 'image/png';
+                if (url.match(/\.jpe?g(\?|#|$)/i)) return 'image/jpeg';
+                if (url.match(/\.webp(\?|#|$)/i)) return 'image/webp';
+                if (url.match(/\.gif(\?|#|$)/i)) return 'image/gif';
                 
-                // Charger l'image
-                img.src = photo.url;
-                
-                // Attendre la résolution de la promesse
-                const newDataUrl = await dataUrlPromise;
-                if (newDataUrl) {
-                    photo.dataUrl = newDataUrl;
-                    console.log(`✅ DataUrl récupéré pour ${photo.name}`);
-                    dataUrlRecovered++;
-                    return true;
+                // Si c'est un dataURL, extraire le type
+                if (url.startsWith('data:image/')) {
+                    const match = url.match(/^data:(image\/[^;]+);/);
+                    if (match) return match[1];
                 }
-            } catch (error) {
-                console.error(`❌ Erreur lors de la récupération du dataUrl:`, error);
+                
+                return fallback;
+            };
+            
+            // Fonction pour déterminer la qualité de compression optimale
+            const getOptimalQuality = (width, height) => {
+                const megapixels = (width * height) / 1000000;
+                
+                // Ajuster la qualité en fonction de la taille de l'image
+                if (megapixels > 8) return 0.6;      // Très grande image
+                if (megapixels > 4) return 0.7;      // Grande image
+                if (megapixels > 2) return 0.8;      // Image moyenne
+                return 0.85;                         // Petite image
+            };
+            
+            // Nombre maximum de tentatives
+            const maxRetries = 2;
+            
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    // Créer une image et la dessiner sur un canvas pour récupérer le dataUrl
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous"; // Nécessaire pour les URL externes
+                    
+                    // Utiliser une promesse avec timeout pour éviter de bloquer
+                    const dataUrlPromise = new Promise((resolve) => {
+                        img.onload = function() {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                
+                                // Déterminer le format et la qualité optimale
+                                const format = detectImageFormat(photo.url);
+                                const quality = getOptimalQuality(img.width, img.height);
+                                
+                                console.log(`📊 Image ${photo.name || 'Sans nom'}: ${img.width}x${img.height} pixels, format: ${format}, qualité: ${quality}`);
+                                
+                                // Utiliser le format d'origine avec la qualité optimale
+                                const newDataUrl = canvas.toDataURL(format, quality);
+                                
+                                // Libérer les ressources canvas
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                
+                                resolve(newDataUrl);
+                            } catch (canvasError) {
+                                console.error(`❌ Erreur lors de la création du canvas (tentative ${attempt + 1}/${maxRetries}):`, canvasError);
+                                resolve(null);
+                            }
+                        };
+                        
+                        img.onerror = (e) => {
+                            console.error(`❌ Erreur de chargement de l'image (tentative ${attempt + 1}/${maxRetries}):`, e);
+                            resolve(null);
+                        };
+                        
+                        // Timeout de 5 secondes (augmenté pour les connexions lentes)
+                        setTimeout(() => {
+                            console.warn(`⏱️ Timeout dépassé pour le chargement de l'image (tentative ${attempt + 1}/${maxRetries})`);
+                            resolve(null);
+                        }, 5000);
+                    });
+                    
+                    // Charger l'image
+                    img.src = photo.url;
+                    
+                    // Attendre la résolution de la promesse
+                    const newDataUrl = await dataUrlPromise;
+                    
+                    if (newDataUrl && newDataUrl.startsWith('data:image/')) {
+                        photo.dataUrl = newDataUrl;
+                        console.log(`✅ DataUrl récupéré pour ${photo.name || 'Sans nom'} (tentative ${attempt + 1}/${maxRetries})`);
+                        dataUrlRecovered++;
+                        return true;
+                    } else if (attempt < maxRetries - 1) {
+                        console.warn(`⚠️ Échec de récupération du dataUrl (tentative ${attempt + 1}/${maxRetries}), nouvelle tentative...`);
+                        // Attendre un peu avant la prochaine tentative
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                } catch (error) {
+                    console.error(`❌ Erreur lors de la récupération du dataUrl (tentative ${attempt + 1}/${maxRetries}):`, error);
+                    if (attempt < maxRetries - 1) {
+                        // Attendre un peu avant la prochaine tentative
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
             }
+            
+            console.error(`❌ Échec de récupération du dataUrl après ${maxRetries} tentatives pour ${photo.name || 'Sans nom'}`);
         }
         return false;
     };
@@ -1284,15 +1505,38 @@ async function addContentToPDF(doc) {
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', fontStyle);
         
-        if (!text) text = '';
-        const lines = doc.splitTextToSize(String(text), maxWidth);
-        lines.forEach((line, index) => {
-            if (y + (index * lineHeight) < pageHeight - margin) {
-                doc.text(line, x, y + (index * lineHeight));
-            }
-        });
+        // Convertir explicitement en chaîne et gérer les valeurs null/undefined/false
+        if (text === null || text === undefined) {
+            text = '';
+        } else if (typeof text === 'boolean') {
+            text = text ? 'Oui' : 'Non';
+        } else {
+            text = String(text);
+        }
         
-        return y + (lines.length * lineHeight);
+        // Vérifier si le texte est vide après conversion
+        if (text.trim() === '') {
+            return y; // Ne pas ajouter de hauteur supplémentaire si le texte est vide
+        }
+        
+        try {
+            const lines = doc.splitTextToSize(text, maxWidth);
+            lines.forEach((line, index) => {
+                if (y + (index * lineHeight) < pageHeight - margin) {
+                    doc.text(line, x, y + (index * lineHeight));
+                }
+            });
+            
+            return y + (lines.length * lineHeight);
+        } catch (error) {
+            console.error(`❌ Erreur lors de l'ajout du texte au PDF:`, error);
+            console.error(`❌ Texte problématique:`, text);
+            // Ajouter un texte d'erreur à la place
+            doc.setTextColor(255, 0, 0); // Rouge pour l'erreur
+            doc.text('[Erreur de texte]', x, y);
+            doc.setTextColor(0, 0, 0); // Remettre la couleur par défaut
+            return y + lineHeight;
+        }
     }
     
     function checkPageBreak(nextContentHeight = 30) {
@@ -1302,6 +1546,257 @@ async function addContentToPDF(doc) {
             return true;
         }
         return false;
+    }
+    
+    // Fonction pour afficher les photos en grille dans le PDF
+    async function addPhotosGrid(photos, startY) {
+        let currentY = startY;
+        const validPhotos = photos.filter(photo => photo.dataUrl && photo.dataUrl.startsWith('data:image/'));
+        
+        if (validPhotos.length === 0) {
+            return currentY;
+        }
+        
+        console.log(`📊 Affichage de ${validPhotos.length} photos en grille`);
+        
+        // Paramètres de la grille
+        const maxWidth = pageWidth - 2 * margin - 20;
+        const photoMaxWidth = maxWidth / 2 - 10; // 2 photos par ligne avec 10px d'espacement
+        const photoMaxHeight = 100;
+        const horizontalSpacing = 20;
+        
+        // Traiter les photos par paires
+        for (let i = 0; i < validPhotos.length; i += 2) {
+            const leftPhoto = validPhotos[i];
+            const rightPhoto = i + 1 < validPhotos.length ? validPhotos[i + 1] : null;
+            
+            let rowHeight = 0;
+            let leftPhotoHeight = 0;
+            let rightPhotoHeight = 0;
+            
+            // Traiter la photo de gauche
+            try {
+                // Charger l'image de gauche
+                const leftImg = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    
+                    img.onload = () => resolve(img);
+                    img.onerror = (e) => reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
+                    
+                    // Timeout pour éviter de bloquer indéfiniment
+                    const timeoutId = setTimeout(() => {
+                        reject(new Error('Timeout de chargement d\'image dépassé'));
+                    }, 5000);
+                    
+                    // Nettoyer le timeout si l'image est chargée ou en erreur
+                    img.onload = () => {
+                        clearTimeout(timeoutId);
+                        resolve(img);
+                    };
+                    
+                    img.onerror = (e) => {
+                        clearTimeout(timeoutId);
+                        reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
+                    };
+                    
+                    img.src = leftPhoto.dataUrl;
+                });
+                
+                // Calculer les dimensions mises à l'échelle
+                let leftWidth = leftImg.width;
+                let leftHeight = leftImg.height;
+                
+                // Mise à l'échelle
+                const leftWidthRatio = photoMaxWidth / leftWidth;
+                const leftHeightRatio = photoMaxHeight / leftHeight;
+                const leftScale = Math.min(leftWidthRatio, leftHeightRatio, 1);
+                
+                leftWidth = leftWidth * leftScale;
+                leftHeight = leftHeight * leftScale;
+                leftPhotoHeight = leftHeight;
+                
+                // Vérifier l'espace disponible
+                checkPageBreak(leftHeight + 30); // 30px pour le nom et l'espacement
+                
+                // Déterminer le format d'image
+                let leftFormat = 'JPEG'; // Format par défaut
+                
+                if (leftPhoto.dataUrl.includes('data:image/png')) {
+                    leftFormat = 'PNG';
+                } else if (leftPhoto.dataUrl.includes('data:image/webp')) {
+                    leftFormat = 'WEBP';
+                } else if (leftPhoto.dataUrl.includes('data:image/jpeg') || leftPhoto.dataUrl.includes('data:image/jpg')) {
+                    leftFormat = 'JPEG';
+                } else if (leftPhoto.dataUrl.includes('data:image/gif')) {
+                    leftFormat = 'GIF';
+                }
+                
+                // Ajouter l'image
+                try {
+                    doc.addImage(leftPhoto.dataUrl, leftFormat, margin + 10, currentY, leftWidth, leftHeight);
+                    console.log(`✅ Photo de gauche ajoutée: ${leftPhoto.name}`);
+                    
+                    // Ajouter le nom de la photo sous l'image
+                    const leftNameY = currentY + leftHeight + 3;
+                    addText(`${leftPhoto.name}`, margin + 10, leftNameY, leftWidth, { fontSize: 8 });
+                } catch (error) {
+                    console.error(`❌ Erreur lors de l'ajout de la photo de gauche:`, error);
+                    // Essayer les formats de secours
+                    const fallbackFormats = ['JPEG', 'PNG', 'WEBP'];
+                    let success = false;
+                    
+                    for (const format of fallbackFormats) {
+                        if (format !== leftFormat) {
+                            try {
+                                doc.addImage(leftPhoto.dataUrl, format, margin + 10, currentY, leftWidth, leftHeight);
+                                console.log(`✅ Photo de gauche ajoutée avec format de secours ${format}`);
+                                success = true;
+                                
+                                // Ajouter le nom de la photo sous l'image
+                                const leftNameY = currentY + leftHeight + 3;
+                                addText(`${leftPhoto.name}`, margin + 10, leftNameY, leftWidth, { fontSize: 8 });
+                                break;
+                            } catch (fallbackError) {
+                                console.error(`❌ Échec du format de secours ${format}:`, fallbackError);
+                            }
+                        }
+                    }
+                    
+                    if (!success) {
+                        // Ajouter un message d'erreur à la place de l'image
+                        doc.setTextColor(255, 0, 0);
+                        addText(`[Erreur: ${leftPhoto.name}]`, margin + 10, currentY + 20, leftWidth, { fontSize: 9 });
+                        doc.setTextColor(0, 0, 0);
+                    }
+                }
+                
+                rowHeight = Math.max(rowHeight, leftHeight + 15);
+            } catch (error) {
+                console.error(`❌ Erreur lors du traitement de la photo de gauche:`, error);
+                doc.setTextColor(255, 0, 0);
+                addText(`[Erreur: ${leftPhoto.name}]`, margin + 10, currentY + 20, photoMaxWidth, { fontSize: 9 });
+                doc.setTextColor(0, 0, 0);
+                rowHeight = Math.max(rowHeight, 35);
+            }
+            
+            // Traiter la photo de droite si elle existe
+            if (rightPhoto) {
+                try {
+                    // Charger l'image de droite
+                    const rightImg = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        
+                        img.onload = () => resolve(img);
+                        img.onerror = (e) => reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
+                        
+                        // Timeout pour éviter de bloquer indéfiniment
+                        const timeoutId = setTimeout(() => {
+                            reject(new Error('Timeout de chargement d\'image dépassé'));
+                        }, 5000);
+                        
+                        // Nettoyer le timeout si l'image est chargée ou en erreur
+                        img.onload = () => {
+                            clearTimeout(timeoutId);
+                            resolve(img);
+                        };
+                        
+                        img.onerror = (e) => {
+                            clearTimeout(timeoutId);
+                            reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
+                        };
+                        
+                        img.src = rightPhoto.dataUrl;
+                    });
+                    
+                    // Calculer les dimensions mises à l'échelle
+                    let rightWidth = rightImg.width;
+                    let rightHeight = rightImg.height;
+                    
+                    // Mise à l'échelle
+                    const rightWidthRatio = photoMaxWidth / rightWidth;
+                    const rightHeightRatio = photoMaxHeight / rightHeight;
+                    const rightScale = Math.min(rightWidthRatio, rightHeightRatio, 1);
+                    
+                    rightWidth = rightWidth * rightScale;
+                    rightHeight = rightHeight * rightScale;
+                    rightPhotoHeight = rightHeight;
+                    
+                    // Déterminer le format d'image
+                    let rightFormat = 'JPEG'; // Format par défaut
+                    
+                    if (rightPhoto.dataUrl.includes('data:image/png')) {
+                        rightFormat = 'PNG';
+                    } else if (rightPhoto.dataUrl.includes('data:image/webp')) {
+                        rightFormat = 'WEBP';
+                    } else if (rightPhoto.dataUrl.includes('data:image/jpeg') || rightPhoto.dataUrl.includes('data:image/jpg')) {
+                        rightFormat = 'JPEG';
+                    } else if (rightPhoto.dataUrl.includes('data:image/gif')) {
+                        rightFormat = 'GIF';
+                    }
+                    
+                    // Position X pour la photo de droite
+                    const rightX = margin + 10 + photoMaxWidth + horizontalSpacing;
+                    
+                    // Ajouter l'image
+                    try {
+                        doc.addImage(rightPhoto.dataUrl, rightFormat, rightX, currentY, rightWidth, rightHeight);
+                        console.log(`✅ Photo de droite ajoutée: ${rightPhoto.name}`);
+                        
+                        // Ajouter le nom de la photo sous l'image
+                        const rightNameY = currentY + rightHeight + 3;
+                        addText(`${rightPhoto.name}`, rightX, rightNameY, rightWidth, { fontSize: 8 });
+                    } catch (error) {
+                        console.error(`❌ Erreur lors de l'ajout de la photo de droite:`, error);
+                        // Essayer les formats de secours
+                        const fallbackFormats = ['JPEG', 'PNG', 'WEBP'];
+                        let success = false;
+                        
+                        for (const format of fallbackFormats) {
+                            if (format !== rightFormat) {
+                                try {
+                                    doc.addImage(rightPhoto.dataUrl, format, rightX, currentY, rightWidth, rightHeight);
+                                    console.log(`✅ Photo de droite ajoutée avec format de secours ${format}`);
+                                    success = true;
+                                    
+                                    // Ajouter le nom de la photo sous l'image
+                                    const rightNameY = currentY + rightHeight + 3;
+                                    addText(`${rightPhoto.name}`, rightX, rightNameY, rightWidth, { fontSize: 8 });
+                                    break;
+                                } catch (fallbackError) {
+                                    console.error(`❌ Échec du format de secours ${format}:`, fallbackError);
+                                }
+                            }
+                        }
+                        
+                        if (!success) {
+                            // Ajouter un message d'erreur à la place de l'image
+                            doc.setTextColor(255, 0, 0);
+                            addText(`[Erreur: ${rightPhoto.name}]`, rightX, currentY + 20, rightWidth, { fontSize: 9 });
+                            doc.setTextColor(0, 0, 0);
+                        }
+                    }
+                    
+                    rowHeight = Math.max(rowHeight, rightHeight + 15);
+                } catch (error) {
+                    console.error(`❌ Erreur lors du traitement de la photo de droite:`, error);
+                    const rightX = margin + 10 + photoMaxWidth + horizontalSpacing;
+                    doc.setTextColor(255, 0, 0);
+                    addText(`[Erreur: ${rightPhoto.name}]`, rightX, currentY + 20, photoMaxWidth, { fontSize: 9 });
+                    doc.setTextColor(0, 0, 0);
+                    rowHeight = Math.max(rowHeight, 35);
+                }
+            }
+            
+            // Mettre à jour la position Y pour la prochaine ligne
+            currentY += rowHeight + 10;
+            
+            // Vérifier s'il faut ajouter une nouvelle page pour la prochaine ligne
+            if (i + 2 < validPhotos.length) {
+                checkPageBreak(photoMaxHeight + 30);
+            }
+        }
+        
+        return currentY;
     }
     
     function addSection(title) {
@@ -1556,51 +2051,136 @@ async function addContentToPDF(doc) {
                     console.warn(`⚠️ SECTION ${sectionIndex} - Aucune photo avec dataUrl valide, tentative de récupération...`);
                     
                     // Tentative de récupération synchrone des dataUrl
+                    const recoveryPromises = [];
+                    
+                    // Fonction pour détecter le format d'image à partir de l'URL ou du contenu
+                    const detectImageFormat = (url, fallback = 'image/jpeg') => {
+                        if (!url) return fallback;
+                        
+                        // Détection par extension de fichier
+                        if (url.match(/\.png(\?|#|$)/i)) return 'image/png';
+                        if (url.match(/\.jpe?g(\?|#|$)/i)) return 'image/jpeg';
+                        if (url.match(/\.webp(\?|#|$)/i)) return 'image/webp';
+                        if (url.match(/\.gif(\?|#|$)/i)) return 'image/gif';
+                        
+                        // Si c'est un dataURL, extraire le type
+                        if (url.startsWith('data:image/')) {
+                            const match = url.match(/^data:(image\/[^;]+);/);
+                            if (match) return match[1];
+                        }
+                        
+                        return fallback;
+                    };
+                    
+                    // Fonction pour déterminer la qualité de compression optimale
+                    const getOptimalQuality = (width, height) => {
+                        const megapixels = (width * height) / 1000000;
+                        
+                        // Ajuster la qualité en fonction de la taille de l'image
+                        if (megapixels > 8) return 0.6;      // Très grande image
+                        if (megapixels > 4) return 0.7;      // Grande image
+                        if (megapixels > 2) return 0.8;      // Image moyenne
+                        return 0.85;                         // Petite image
+                    };
+                    
+                    // Créer une promesse pour chaque photo qui a besoin de récupération
                     for (const photo of photos) {
                         if (!photo.dataUrl && photo.url) {
-                            console.log(`🔄 Tentative de récupération synchrone du dataUrl pour ${photo.name}`);
-                            try {
-                                // Créer une image temporaire et un canvas
-                                const tempImg = new Image();
-                                tempImg.crossOrigin = "Anonymous";
-                                
-                                // Attendre que l'image soit chargée (de manière synchrone avec une promesse)
-                                const dataUrlPromise = new Promise((resolve) => {
-                                    tempImg.onload = function() {
-                                        try {
-                                            const canvas = document.createElement('canvas');
-                                            canvas.width = tempImg.width;
-                                            canvas.height = tempImg.height;
-                                            const ctx = canvas.getContext('2d');
-                                            ctx.drawImage(tempImg, 0, 0);
-                                            const newDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                                            resolve(newDataUrl);
-                                        } catch (error) {
-                                            console.error(`❌ Erreur canvas:`, error);
-                                            resolve(null);
-                                        }
-                                    };
-                                    tempImg.onerror = () => {
-                                        console.error(`❌ Erreur de chargement de l'image`);
-                                        resolve(null);
-                                    };
+                            console.log(`🔄 Tentative de récupération synchrone du dataUrl pour ${photo.name || 'Sans nom'}`);
+                            
+                            // Ajouter une promesse pour cette photo
+                            const recoveryPromise = (async () => {
+                                try {
+                                    // Créer une image temporaire et un canvas
+                                    const tempImg = new Image();
+                                    tempImg.crossOrigin = "Anonymous";
                                     
-                                    // Définir un timeout pour éviter de bloquer indéfiniment
-                                    setTimeout(() => resolve(null), 2000);
-                                });
-                                
-                                // Charger l'image
-                                tempImg.src = photo.url;
-                                
-                                // Attendre la résolution de la promesse
-                                const newDataUrl = await dataUrlPromise;
-                                if (newDataUrl) {
-                                    photo.dataUrl = newDataUrl;
-                                    console.log(`✅ DataUrl récupéré avec succès pour ${photo.name}`);
+                                    // Attendre que l'image soit chargée (de manière synchrone avec une promesse)
+                                    const dataUrlPromise = new Promise((resolve) => {
+                                        // Nettoyer les ressources en cas de succès
+                                        tempImg.onload = function() {
+                                            try {
+                                                const canvas = document.createElement('canvas');
+                                                canvas.width = tempImg.width;
+                                                canvas.height = tempImg.height;
+                                                const ctx = canvas.getContext('2d');
+                                                ctx.drawImage(tempImg, 0, 0);
+                                                
+                                                // Déterminer le format et la qualité optimale
+                                                const format = detectImageFormat(photo.url);
+                                                const quality = getOptimalQuality(tempImg.width, tempImg.height);
+                                                
+                                                console.log(`📊 Image ${photo.name || 'Sans nom'}: ${tempImg.width}x${tempImg.height} pixels, format: ${format}, qualité: ${quality}`);
+                                                
+                                                const newDataUrl = canvas.toDataURL(format, quality);
+                                                
+                                                // Libérer les ressources canvas
+                                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                                
+                                                resolve(newDataUrl);
+                                            } catch (canvasError) {
+                                                console.error(`❌ Erreur canvas pour ${photo.name || 'Sans nom'}:`, canvasError);
+                                                resolve(null);
+                                            }
+                                        };
+                                        
+                                        // Gérer les erreurs de chargement
+                                        tempImg.onerror = (e) => {
+                                            console.error(`❌ Erreur de chargement de l'image ${photo.name || 'Sans nom'}:`, e);
+                                            resolve(null);
+                                        };
+                                        
+                                        // Définir un timeout pour éviter de bloquer indéfiniment (5 secondes)
+                                        setTimeout(() => {
+                                            console.warn(`⏱️ Timeout dépassé pour le chargement de l'image ${photo.name || 'Sans nom'}`);
+                                            resolve(null);
+                                        }, 5000);
+                                    });
+                                    
+                                    // Charger l'image
+                                    tempImg.src = photo.url;
+                                    
+                                    // Attendre la résolution de la promesse
+                                    const newDataUrl = await dataUrlPromise;
+                                    
+                                    if (newDataUrl && newDataUrl.startsWith('data:image/')) {
+                                        photo.dataUrl = newDataUrl;
+                                        console.log(`✅ DataUrl récupéré avec succès pour ${photo.name || 'Sans nom'}`);
+                                        return true;
+                                    } else {
+                                        console.warn(`⚠️ Échec de récupération du dataUrl pour ${photo.name || 'Sans nom'}`);
+                                        return false;
+                                    }
+                                } catch (error) {
+                                    console.error(`❌ Erreur lors de la récupération du dataUrl pour ${photo.name || 'Sans nom'}:`, error);
+                                    return false;
                                 }
-                            } catch (error) {
-                                console.error(`❌ Erreur lors de la récupération du dataUrl:`, error);
-                            }
+                            })();
+                            
+                            recoveryPromises.push(recoveryPromise);
+                        }
+                    }
+                    
+                    // Attendre que toutes les récupérations soient terminées (avec un timeout global)
+                    if (recoveryPromises.length > 0) {
+                        console.log(`🔄 Tentative de récupération de ${recoveryPromises.length} dataUrl...`);
+                        
+                        try {
+                            // Utiliser Promise.all avec un timeout global pour éviter de bloquer trop longtemps
+                            const timeoutPromise = new Promise(resolve => setTimeout(() => {
+                                console.warn(`⏱️ Timeout global dépassé pour la récupération des dataUrl`);
+                                resolve([]);
+                            }, 10000)); // 10 secondes maximum pour toutes les récupérations
+                            
+                            // Attendre soit que toutes les promesses soient résolues, soit que le timeout soit atteint
+                            await Promise.race([
+                                Promise.all(recoveryPromises),
+                                timeoutPromise
+                            ]);
+                            
+                            console.log(`✅ Récupération des dataUrl terminée`);
+                        } catch (error) {
+                            console.error(`❌ Erreur lors de la récupération des dataUrl:`, error);
                         }
                     }
                 }
@@ -1615,8 +2195,13 @@ async function addContentToPDF(doc) {
                         margin, currentY, pageWidth - 2 * margin, { fontSize: 10, fontStyle: 'bold' });
                     currentY += 8;
                     
-                    // Add photos to PDF - use pre-stored dataUrl
-                    for (let i = 0; i < photos.length; i++) {
+                    // Utiliser la grille de photos si plus d'une photo
+                    if (finalValidPhotos.length > 1) {
+                        currentY = await addPhotosGrid(finalValidPhotos, currentY);
+                    } else {
+                        // Sinon, utiliser l'affichage standard pour une seule photo
+                        // Add photos to PDF - use pre-stored dataUrl
+                        for (let i = 0; i < photos.length; i++) {
                         const photo = photos[i];
                         console.log(`🔍 Traitement de la photo ${i + 1}/${photos.length}: ${photo.name}`);
                         console.log(`🔍 Propriétés de la photo:`, Object.keys(photo).join(', '));
@@ -1696,17 +2281,48 @@ async function addContentToPDF(doc) {
                             // Create image to get dimensions
                             const img = await new Promise((resolve, reject) => {
                                 const image = new Image();
+                                
                                 image.onload = () => {
                                     console.log(`✅ Image chargée avec succès: ${image.width}x${image.height}`);
                                     resolve(image);
                                 };
+                                
                                 image.onerror = (e) => {
-                                    console.error(`❌ Erreur de chargement de l'image ${photo.name}:`, e);
-                                    reject(e);
+                                    console.error(`❌ Erreur de chargement de l'image ${photo.name || 'Sans nom'}:`, e);
+                                    reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
                                 };
+                                
+                                // Timeout pour éviter de bloquer indéfiniment
+                                const timeoutId = setTimeout(() => {
+                                    console.error(`⏱️ Timeout dépassé pour le chargement de l'image ${photo.name || 'Sans nom'}`);
+                                    reject(new Error('Timeout de chargement d\'image dépassé'));
+                                }, 8000); // 8 secondes de timeout
+                                
+                                // Nettoyer le timeout si l'image est chargée ou en erreur
+                                image.onload = () => {
+                                    clearTimeout(timeoutId);
+                                    console.log(`✅ Image chargée avec succès: ${image.width}x${image.height}`);
+                                    resolve(image);
+                                };
+                                
+                                image.onerror = (e) => {
+                                    clearTimeout(timeoutId);
+                                    console.error(`❌ Erreur de chargement de l'image ${photo.name || 'Sans nom'}:`, e);
+                                    reject(new Error(`Erreur de chargement de l'image: ${e.message || 'Raison inconnue'}`));
+                                };
+                                
                                 console.log(`🔄 Chargement de l'image à partir du dataUrl...`);
                                 image.src = dataUrl;
+                            }).catch(error => {
+                                console.error(`❌ Échec du chargement de l'image:`, error);
+                                throw error; // Propager l'erreur pour être capturée par le bloc catch externe
                             });
+                            
+                            // Vérifier que l'image a été chargée correctement
+                            if (!img || !img.width || !img.height) {
+                                console.error(`❌ Image invalide ou dimensions nulles pour ${photo.name || 'Sans nom'}`);
+                                throw new Error('Image invalide ou dimensions nulles');
+                            }
                             
                             // Calculate scaled dimensions
                             const maxWidth = pageWidth - 2 * margin - 20;
@@ -1723,6 +2339,12 @@ async function addContentToPDF(doc) {
                             width = width * scale;
                             height = height * scale;
                             
+                            // Vérifier que les dimensions sont valides
+                            if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+                                console.error(`❌ Dimensions invalides après mise à l'échelle: ${width}x${height}`);
+                                throw new Error('Dimensions d\'image invalides après mise à l\'échelle');
+                            }
+                            
                             console.log(`📏 Final dimensions: ${width}x${height} (scale: ${scale})`);
                             
                             // Check page space
@@ -1731,29 +2353,55 @@ async function addContentToPDF(doc) {
                             console.log(`📍 Current Y position: ${currentY}`);
                             console.log(`📍 Will add image at: (${margin + 10}, ${currentY})`);
                             
-                            // Try different image formats
-                            let imageFormat = 'JPEG';
+                            // Détection plus robuste du format d'image
+                            let imageFormat = 'JPEG'; // Format par défaut
+                            
                             if (dataUrl.includes('data:image/png')) {
                                 imageFormat = 'PNG';
                             } else if (dataUrl.includes('data:image/webp')) {
                                 imageFormat = 'WEBP';
+                            } else if (dataUrl.includes('data:image/jpeg') || dataUrl.includes('data:image/jpg')) {
+                                imageFormat = 'JPEG';
+                            } else if (dataUrl.includes('data:image/gif')) {
+                                imageFormat = 'GIF';
                             }
                             
                             console.log(`🎨 Using image format: ${imageFormat}`);
                             
+                            // Liste des formats à essayer en cas d'échec
+                            const fallbackFormats = ['JPEG', 'PNG', 'WEBP'];
+                            
+                            // Essayer d'abord avec le format détecté
+                            let success = false;
+                            let lastError = null;
+                            
                             try {
                                 doc.addImage(dataUrl, imageFormat, margin + 10, currentY, width, height);
-                                console.log(`🎉 SUCCESS! Image added to PDF at (${margin + 10}, ${currentY}) size ${width}x${height}`);
+                                console.log(`🎉 SUCCESS! Image added to PDF with format ${imageFormat}`);
+                                success = true;
                             } catch (addImageError) {
-                                console.error(`❌ Error in doc.addImage:`, addImageError);
-                                // Try with PNG format as fallback
-                                try {
-                                    console.log(`🔄 Trying PNG fallback...`);
-                                    doc.addImage(dataUrl, 'PNG', margin + 10, currentY, width, height);
-                                    console.log(`🎉 SUCCESS with PNG fallback!`);
-                                } catch (pngError) {
-                                    console.error(`❌ PNG fallback also failed:`, pngError);
-                                    throw pngError;
+                                console.error(`❌ Error with format ${imageFormat}:`, addImageError);
+                                lastError = addImageError;
+                                
+                                // Essayer les formats de secours
+                                for (const format of fallbackFormats) {
+                                    if (format !== imageFormat) { // Ne pas réessayer le même format
+                                        try {
+                                            console.log(`🔄 Trying ${format} fallback...`);
+                                            doc.addImage(dataUrl, format, margin + 10, currentY, width, height);
+                                            console.log(`🎉 SUCCESS with ${format} fallback!`);
+                                            success = true;
+                                            break;
+                                        } catch (fallbackError) {
+                                            console.error(`❌ ${format} fallback failed:`, fallbackError);
+                                            lastError = fallbackError;
+                                        }
+                                    }
+                                }
+                                
+                                if (!success) {
+                                    console.error(`❌ All image format attempts failed`);
+                                    throw lastError || new Error('Échec de l\'ajout de l\'image au PDF');
                                 }
                             }
                             
@@ -1764,12 +2412,87 @@ async function addContentToPDF(doc) {
                             
                             console.log(`✅ Photo ${i + 1} (${photo.name}) completed! New Y position: ${currentY}`);
                         } catch (error) {
-                        console.error(`💥 FATAL ERROR processing photo ${photo.name}:`, error);
-                        console.error(`💥 Error stack:`, error.stack);
-                        // Add error message instead
-                        currentY = addText(`Photo ${i + 1}: ${photo.name} (erreur: ${error.message})`, 
-                            margin + 10, currentY, pageWidth - 2 * margin - 20, { fontSize: 9 });
-                        currentY += 8;
+                            console.error(`💥 ERROR processing photo ${photo.name || 'Sans nom'}:`, error);
+                            console.error(`💥 Error stack:`, error.stack);
+                            
+                            // Ajouter une icône d'erreur et un message explicatif plus visuel
+                            try {
+                                // Hauteur du bloc d'erreur
+                                const errorBoxHeight = 60;
+                                
+                                // Vérifier s'il faut ajouter une nouvelle page
+                                checkPageBreak(errorBoxHeight + 10);
+                                
+                                // Ajouter un rectangle rouge pour indiquer l'erreur avec un dégradé
+                                const gradientX = margin + 10;
+                                const gradientY = currentY;
+                                const gradientWidth = maxWidth - 20;
+                                const gradientHeight = errorBoxHeight;
+                                
+                                // Créer un dégradé de couleur pour le fond (du rouge clair au blanc)
+                                const grd = doc.setGState(doc.GState({opacity: 0.3}));
+                                doc.setFillColor(255, 240, 240); // Fond rouge très clair
+                                doc.roundedRect(gradientX, gradientY, gradientWidth, gradientHeight, 5, 5, 'F');
+                                doc.setGState(doc.GState({opacity: 1}));
+                                
+                                // Ajouter une bordure rouge
+                                doc.setDrawColor(220, 53, 69); // Rouge bootstrap
+                                doc.setLineWidth(0.5);
+                                doc.roundedRect(gradientX, gradientY, gradientWidth, gradientHeight, 5, 5, 'S');
+                                
+                                // Ajouter un symbole d'avertissement
+                                doc.setFont('helvetica', 'bold');
+                                doc.setTextColor(220, 53, 69); // Rouge bootstrap
+                                doc.setFontSize(20);
+                                doc.text('⚠️', gradientX + 15, gradientY + 25);
+                                
+                                // Ajouter le titre de l'erreur
+                                doc.setFontSize(12);
+                                doc.text(`Impossible d'ajouter la photo`, gradientX + 35, gradientY + 20);
+                                
+                                // Ajouter le nom de la photo
+                                doc.setFont('helvetica', 'normal');
+                                doc.setFontSize(10);
+                                doc.text(`Nom: ${photo.name || 'Sans nom'}`, gradientX + 35, gradientY + 32);
+                                
+                                // Ajouter le message d'erreur
+                                doc.setTextColor(100, 0, 0); // Rouge plus foncé pour le détail
+                                doc.setFontSize(8);
+                                
+                                // Tronquer le message d'erreur s'il est trop long
+                                let errorMessage = error.message || 'Erreur inconnue';
+                                if (errorMessage.length > 80) {
+                                    errorMessage = errorMessage.substring(0, 77) + '...';
+                                }
+                                
+                                doc.text(`Erreur: ${errorMessage}`, gradientX + 35, gradientY + 42);
+                                
+                                // Ajouter un conseil
+                                doc.setTextColor(100, 100, 100); // Gris pour le conseil
+                                doc.text('Conseil: Vérifiez le format de l\'image ou réessayez avec une autre photo', 
+                                    gradientX + 35, gradientY + 52);
+                                
+                                // Restaurer les couleurs et polices par défaut
+                                doc.setTextColor(0, 0, 0);
+                                doc.setDrawColor(0, 0, 0);
+                                doc.setFillColor(255, 255, 255);
+                                doc.setFont('helvetica', 'normal');
+                                doc.setFontSize(12);
+                                doc.setLineWidth(0.2);
+                                
+                                // Mettre à jour la position Y
+                                currentY += errorBoxHeight + 10;
+                            } catch (formatError) {
+                                // En cas d'erreur lors de la mise en forme, utiliser une approche plus simple
+                                console.error(`❌ Erreur lors de l'affichage du message d'erreur:`, formatError);
+                                doc.setTextColor(255, 0, 0); // Texte en rouge
+                                currentY = addText(`Photo ${i + 1}: ${photo.name || 'Sans nom'} (erreur: ${error.message || 'Erreur inconnue'})`, 
+                                    margin + 10, currentY, pageWidth - 2 * margin - 20, { fontSize: 9 });
+                                doc.setTextColor(0, 0, 0); // Restaurer la couleur par défaut
+                                currentY += 15;
+                            }
+                        }
+                        }
                     }
                 }
                 currentY += 5;
@@ -1924,4 +2647,3 @@ window.elevatorInspectionDebug = {
 };
 
 console.log('Elevator Inspection App loaded. Debug tools available at window.elevatorInspectionDebug');
-}
