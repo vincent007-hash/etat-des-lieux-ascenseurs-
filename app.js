@@ -221,6 +221,15 @@ function handlePhotoUpload(event, sectionIndex) {
                             size: compressedBlob.size
                         };
                         
+                        console.log(`🔍 DEBUG - Photo créée:`, {
+                            id: photoData.id,
+                            name: photoData.name,
+                            urlLength: photoData.url ? photoData.url.length : 0,
+                            dataUrlLength: photoData.dataUrl ? photoData.dataUrl.length : 0,
+                            urlStart: photoData.url ? photoData.url.substring(0, 30) + '...' : 'null',
+                            dataUrlStart: photoData.dataUrl ? photoData.dataUrl.substring(0, 30) + '...' : 'null'
+                        });
+                        
                         // Vérification finale que le dataUrl est valide
                         if (!photoData.dataUrl || !photoData.dataUrl.startsWith('data:image/')) {
                             console.error(`❌ DataURL invalide pour ${file.name} après création de photoData`);
@@ -467,7 +476,11 @@ function updatePhotoPreview(sectionIndex) {
         
         const img = document.createElement('img');
         // Utiliser dataUrl directement si l'URL n'a pas pu être recréée
-        img.src = photo.url || photo.dataUrl;
+        const imgSrc = photo.url || photo.dataUrl;
+        console.log(`🖼️ Image source pour ${photo.name}: ${imgSrc ? (imgSrc.substring(0, 30) + '...') : 'MANQUANTE'}`);
+        console.log(`🖼️ Type de source: ${imgSrc ? (imgSrc.startsWith('data:image/') ? 'dataUrl' : 'URL') : 'AUCUNE'}`);
+        
+        img.src = imgSrc;
         img.alt = photo.name;
         
         // Ajouter un gestionnaire d'événements pour détecter les erreurs de chargement d'image
@@ -1024,6 +1037,24 @@ async function generatePDF() {
                 if (hasValidDataUrl) {
                     photosWithDataUrl++;
                     console.log(`✅ Photo valide: ${photo.name}, dataUrl présent (${photo.dataUrl.length} caractères)`);
+                    console.log(`✅ dataUrl commence par: ${photo.dataUrl.substring(0, 50)}...`);
+                    
+                    // Vérifier si l'URL est également présente
+                    if (photo.url) {
+                        console.log(`✅ URL également présente pour ${photo.name}: ${photo.url.substring(0, 50)}...`);
+                        
+                        // Si l'URL n'est pas un dataUrl, la remplacer par le dataUrl
+                        if (!photo.url.startsWith('data:image/')) {
+                            console.log(`🔄 Remplacement de l'URL par le dataUrl pour ${photo.name}`);
+                            photo.url = photo.dataUrl;
+                            photosFixed = true;
+                        }
+                    } else {
+                        console.log(`⚠️ URL manquante pour ${photo.name}, utilisation du dataUrl`);
+                        photo.url = photo.dataUrl;
+                        photosFixed = true;
+                    }
+                    
                     return true;
                 }
                 
